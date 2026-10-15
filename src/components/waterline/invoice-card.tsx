@@ -48,6 +48,14 @@ export function InvoiceCard({
   const state = invoice.verificationState;
   const funded = invoice.fundingState === "accepted" || invoice.fundingState === "settled";
   const overdue = invoice.dueInDays < 0;
+  // Mid-pipeline payout (accepted/reserved/sent) — the money is moving right
+  // now; the card says so instead of the coarser "Funded".
+  const payingOut =
+    funded &&
+    invoice.fundingState !== "settled" &&
+    invoice.payoutState != null &&
+    invoice.payoutState !== "queued" &&
+    invoice.payoutState !== "settled";
 
   return (
     <motion.button
@@ -69,17 +77,18 @@ export function InvoiceCard({
           <div className="type-caption text-ink-400 mt-0.5 type-mono text-[12px]">{invoice.externalRef}</div>
         </div>
         <div className="text-end shrink-0">
-          <Money fils={invoice.grossFils} size="heading" whole={false} />
+          {/* The money figure is the card's focal point (PRD 11.1) */}
+          <Money fils={invoice.grossFils} size="heading" whole={false} className="font-semibold" />
           <div className={cn("type-caption mt-0.5 money", overdue ? "text-danger-w" : "text-ink-400")}>
             {overdue ? T.invoices.overdue(-invoice.dueInDays) : T.invoices.dueIn(invoice.dueInDays)}
           </div>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <StatusDot tone={stateTone[state] ?? "neutral"} pulse={state === "deduped"} />
-          <span className="type-caption text-ink-600">
+      <div className="mt-3 pt-3 border-t border-border/70 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <StatusDot tone={stateTone[state] ?? "neutral"} pulse={state === "deduped" || payingOut} />
+          <span className="type-caption text-ink-600 truncate">
             {T.invoices.stateLabels[state] ?? state}
             {invoice.verifiedVia && T.invoices.verifiedVia[invoice.verifiedVia as keyof typeof T.invoices.verifiedVia] ? (
               <span className="text-ink-400"> · {T.invoices.verifiedVia[invoice.verifiedVia as keyof typeof T.invoices.verifiedVia]}</span>
@@ -92,6 +101,11 @@ export function InvoiceCard({
             <span className="type-label px-2 py-1 rounded-sm bg-caution-w/10 text-caution-w border border-caution-w/30 flex items-center gap-1.5">
               <WlIcon name="clock" size={12} />
               {T.invoices.queuedTitle}
+            </span>
+          ) : payingOut ? (
+            <span className="type-label px-2 py-1 rounded-sm bg-accent-w-soft text-accent-w-dark border border-accent-w/30 flex items-center gap-1.5">
+              <WlIcon name="arrow-out" size={12} />
+              {T.invoices.payingOut}
             </span>
           ) : (
             <span className="type-label px-2 py-1 rounded-sm bg-success-w/10 text-success-w border border-success-w/30">

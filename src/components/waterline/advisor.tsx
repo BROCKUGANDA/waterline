@@ -13,8 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Textarea } from "@/components/ui/textarea";
 import { useAdvisor, type AdvisorTurn } from "@/hooks/waterline";
 import { useStatus, useOverview, useTreasury } from "@/hooks/waterline";
-import { useUi } from "@/stores/ui";
-import { t } from "@/lib/i18n";
+import { useUi } from "@/stores/ui";import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { WlIcon } from "./icons";
 import { StatusDot } from "./primitives";
@@ -43,7 +42,11 @@ export function AdvisorPanel() {
   const { data: status } = useStatus();
   const advisor = useAdvisor();
 
-  const [open, setOpen] = useState(false);
+  // Open state lives in the UI store: the desktop rail launcher and the
+  // mobile FAB are the same sheet. The rail entry point keeps the desktop
+  // viewport free of floating overlays — nothing ever covers a money figure.
+  const open = useUi((s) => s.advisorOpen);
+  const setOpen = useUi((s) => s.setAdvisorOpen);
   const [question, setQuestion] = useState("");
   const [thread, setThread] = useState<AdvisorTurn[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -104,16 +107,16 @@ export function AdvisorPanel() {
 
   return (
     <>
-      {/* Floating entry point — above the mobile tab bar, corner on desktop */}
+      {/* Floating entry point — mobile only; desktop uses the rail launcher */}
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label={T.advisor.title}
         className={cn(
-          "fixed z-40 h-14 w-14 rounded-full grad-liquidity text-white elev-2 press-scale",
+          "md:hidden fixed z-40 h-14 w-14 rounded-full grad-liquidity text-white elev-2 press-scale",
           "flex items-center justify-center",
-          "bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] md:bottom-6",
-          lang === "ar" ? "left-4 md:left-6" : "right-4 md:right-6",
+          "bottom-[calc(env(safe-area-inset-bottom)+5.25rem)]",
+          lang === "ar" ? "left-4" : "right-4",
           "transition-transform hover:scale-105 focus-visible:scale-105"
         )}
       >

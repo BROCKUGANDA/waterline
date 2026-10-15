@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useOverview, useConsents, useGrantConsent, useRevokeConsent } from "@/hooks/waterline";
 import { useUi } from "@/stores/ui";
 import { t } from "@/lib/i18n";
@@ -75,6 +75,7 @@ export function OnboardingFlow() {
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{T.onboarding.s1Title}</DialogTitle>
+          <DialogDescription>{T.onboarding.s1Body}</DialogDescription>
         </DialogHeader>
 
         {/* Header band — the waterline motif carries the brand */}

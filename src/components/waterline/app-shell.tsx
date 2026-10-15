@@ -40,12 +40,20 @@ function RailButton({
       aria-current={active ? "page" : undefined}
       title={collapsed ? label : undefined}
       className={cn(
-        "w-full flex items-center gap-3 rounded-md px-3 py-2.5 type-body transition-colors press-scale",
+        "relative w-full flex items-center gap-3 rounded-md px-3 py-2.5 type-body transition-colors press-scale",
         active
           ? "bg-accent-w-soft text-accent-w-dark font-semibold"
           : "text-ink-600 hover:bg-surface-2 hover:text-foreground"
       )}
     >
+      {/* Active accent — a 3px bar on the leading edge, unmistakable at a glance */}
+      {active && (
+        <motion.span
+          layoutId="rail-active"
+          className="absolute start-0 top-1.5 bottom-1.5 w-[3px] rounded-full grad-liquidity"
+          transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}
+        />
+      )}
       <WlIcon name={icon} size={20} filled={active} />
       {!collapsed && <span className="truncate">{label}</span>}
     </button>
@@ -53,7 +61,7 @@ function RailButton({
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { view, setView, lang, toggleLang, railCollapsed, toggleRail } = useUi();
+  const { view, setView, lang, toggleLang, railCollapsed, toggleRail, setAdvisorOpen } = useUi();
   const { theme, setTheme } = useTheme();
   const T = t(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
@@ -115,6 +123,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Utilities — separated from navigation by a rule (PRD 11.5 rail anatomy) */}
           <div className="p-2 space-y-1 border-t border-border">
+            {/* Advisor launcher — explains, never decides. Lives in the rail on
+                desktop so nothing floats over money figures (PRD 11.1). */}
+            <button
+              type="button"
+              onClick={() => setAdvisorOpen(true)}
+              className="w-full flex items-center gap-3 rounded-md px-3 py-2 type-caption text-ink-600 hover:bg-accent-w-soft hover:text-accent-w-dark press-scale"
+              title={T.advisor.title}
+            >
+              <WlIcon name="advisor" size={20} className="text-accent-w" />
+              {!railCollapsed && <span>{T.advisor.title}</span>}
+            </button>
             <button
               type="button"
               onClick={toggleLang}

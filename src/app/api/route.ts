@@ -34,6 +34,7 @@ const ROUTES: RouteDescriptor[] = [
   { path: "/api/escrow", method: "POST", purpose: "Award an escrow contract at the custodian", moneyMoving: true },
   { path: "/api/escrow/{id}/milestones/{mid}", method: "POST", purpose: "Milestone state machine (delivered/approve/dispute/resolve)", moneyMoving: true },
   { path: "/api/treasury", method: "GET", purpose: "Autopilot state: policy, obligations, projection, sweeps", moneyMoving: false },
+  { path: "/api/treasury/projection", method: "GET", purpose: "90-day forward cash projection (advisory, deterministic)", moneyMoving: false },
   { path: "/api/treasury/policy", method: "PUT", purpose: "Update floor / horizon / safety margin / autopilot", moneyMoving: false },
   { path: "/api/treasury/sweep", method: "POST", purpose: "Sweep surplus to an instrument (rule-pack decided)", moneyMoving: true },
   { path: "/api/treasury/recall", method: "POST", purpose: "Recall a swept position with accrued yield", moneyMoving: true },

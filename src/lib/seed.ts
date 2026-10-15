@@ -189,6 +189,17 @@ async function runSeed(): Promise<void> {
       settledAt: daysAgo(12), reconciledAt: daysAgo(11), etaSeconds: 14,
     },
   });
+  // Delivery completion: the settled advance was delivered to the du Pay
+  // wallet — the wallet balance includes the net (same entry the live
+  // pipeline posts when a payout crosses into "settled").
+  await postTransaction({
+    tenantId: t, txnId: "txn_settled_deliver", sourceEventId: `payout.settled:pay_settled`, valueDate: daysAgo(12),
+    entries: [
+      { accountCode: LEDGER_ACCOUNTS.FUNDING_POOL, direction: "debit", amountFils: net, memo: "Advance delivered — du Pay •••• 4471" },
+      { accountCode: LEDGER_ACCOUNTS.SME_WALLET(t), direction: "credit", amountFils: net, memo: "Early payment received — du Pay •••• 4471" },
+    ],
+    eventType: "payout.settled", eventSubjectRef: "pay_settled", skipEvent: true,
+  });
   // Funding txn: control the claim, pay the net, earn the fee, hold the reserve.
   await postTransaction({
     tenantId: t, txnId: "txn_settled_fund", sourceEventId: `offer.accept:${settledOffer.id}`, valueDate: daysAgo(12),

@@ -60,6 +60,16 @@ export function RunwayStrip({ obligations, walletFils }: { obligations: Obligati
     return Math.min(100, (days / 90) * 100);
   };
 
+  // Clustered markers (within 6% of the previous) lift above the strip with
+  // a connector to their day — no dot ever hides another (PRD 11.8 honesty).
+  const staggered = forward
+    .map((o) => ({ o, pos: position(o) }))
+    .reduce<{ o: ObligationDto; pos: number; raised: boolean }[]>((acc, p) => {
+      const prev = acc[acc.length - 1];
+      acc.push({ ...p, raised: prev ? p.pos - prev.pos < 6 : false });
+      return acc;
+    }, []);
+
   return (
     <div>
       <div className="flex items-baseline justify-between mb-2">
@@ -83,24 +93,34 @@ export function RunwayStrip({ obligations, walletFils }: { obligations: Obligati
           <div key={d} className="absolute top-1/2 h-3 w-px bg-ink-200 dark:bg-ink-600 -translate-y-1/2" style={{ [`${lang === "ar" ? "right" : "left"}`]: `${(d / 90) * 100}%` }} />
         ))}
 
-        {/* obligation markers */}
-        {forward.map((o) => (
-          <button
+        {/* obligation markers — clustered ones lift above the strip on a connector */}
+        {staggered.map(({ o, pos, raised }) => (
+          <div
             key={o.id}
-            type="button"
-            onClick={() => setSelected(selected?.id === o.id ? null : o)}
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rtl:translate-x-1/2 group"
-            style={{ [`${lang === "ar" ? "right" : "left"}`]: `${position(o)}%` }}
-            aria-label={`${kindLabel(o.kind, T.cash)} — ${o.label} — ${T.cash.confidence(Math.round(o.confidencePermyriad / 100))}`}
+            className="absolute top-1/2"
+            style={{ [`${lang === "ar" ? "right" : "left"}`]: `${pos}%` }}
           >
-            <span
+            {raised && (
+              <span aria-hidden className="absolute -top-2 h-2 w-px bg-ink-200 dark:bg-ink-600" style={{ [`${lang === "ar" ? "right" : "left"}`]: 0 }} />
+            )}
+            <button
+              type="button"
+              onClick={() => setSelected(selected?.id === o.id ? null : o)}
               className={cn(
-                "block h-3.5 w-3.5 rounded-full border-2 border-border elev-2 transition-transform",
-                kindTone[o.kind] ?? kindTone.custom,
-                "group-hover:scale-125 group-focus-visible:scale-125"
+                "group absolute -translate-x-1/2 rtl:translate-x-1/2",
+                raised ? "-top-[22px]" : "top-0 -translate-y-1/2"
               )}
-            />
-          </button>
+              aria-label={`${kindLabel(o.kind, T.cash)} — ${o.label} — ${T.cash.confidence(Math.round(o.confidencePermyriad / 100))}`}
+            >
+              <span
+                className={cn(
+                  "block h-3.5 w-3.5 rounded-full border-2 border-border elev-2 transition-transform",
+                  kindTone[o.kind] ?? kindTone.custom,
+                  "group-hover:scale-125 group-focus-visible:scale-125"
+                )}
+              />
+            </button>
+          </div>
         ))}
 
         {/* day labels */}

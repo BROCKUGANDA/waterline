@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { toast } from "sonner";
 import {
@@ -72,7 +72,7 @@ function SubmitDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
       <DialogContent className="max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="type-title">{T.invoices.submitTitle}</DialogTitle>
-          <p className="type-caption text-ink-400">{T.invoices.submitHint}</p>
+          <DialogDescription className="type-caption text-ink-400">{T.invoices.submitHint}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
@@ -169,6 +169,9 @@ function PayoutDialog({ payout, onClose }: { payout: PayoutDto | null; onClose: 
       <DialogContent className="max-w-[480px]" onPointerDown={(e) => settled && e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle className="type-title">{settled ? T.invoices.settledTitle : T.invoices.processing}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {settled ? T.invoices.settledTo(p.destinationRef) : T.invoices.stageHint}
+          </DialogDescription>
         </DialogHeader>
         {settled ? <SettledCelebration payout={p} /> : <StageTracker payout={p} amountFils={p.amountFils} />}
         {settled && (
@@ -347,8 +350,8 @@ function QuoteFlow({ invoiceId }: { invoiceId: string }) {
         <DialogContent className="max-w-[480px]">
           <DialogHeader>
             <DialogTitle className="type-title">{T.invoices.acceptTitle}</DialogTitle>
+            <DialogDescription className="type-body text-ink-600">{T.invoices.acceptBody}</DialogDescription>
           </DialogHeader>
-          <p className="type-body text-ink-600">{T.invoices.acceptBody}</p>
           {model && <FeeBreakdown model={model} daysEarly={daysEarly || 1} />}
           <div className="flex gap-3">
             <button

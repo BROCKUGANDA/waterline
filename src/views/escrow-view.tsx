@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useEscrow, useMilestoneAction, useCreateEscrow, useOverview } from "@/hooks/waterline";
 import { Money } from "@/components/waterline/money";
@@ -276,6 +276,7 @@ function NewContractDialog({ open, onOpenChange }: { open: boolean; onOpenChange
       <DialogContent className="max-w-[480px] max-h-[85vh] overflow-y-auto wl-scroll">
         <DialogHeader>
           <DialogTitle className="type-title">{T.escrow.newContract}</DialogTitle>
+          <DialogDescription className="type-caption text-ink-400">{T.escrow.subtitle}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">

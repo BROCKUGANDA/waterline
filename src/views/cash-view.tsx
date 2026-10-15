@@ -8,9 +8,10 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { useOverview, useTreasury, useUpdatePolicy, useSweep, useRecall, useAddObligation } from "@/hooks/waterline";
+import { useOverview, useTreasury, useForecast, useUpdatePolicy, useSweep, useRecall, useAddObligation } from "@/hooks/waterline";
 import { LiquidityGauge } from "@/components/waterline/liquidity-gauge";
 import { RunwayStrip } from "@/components/waterline/runway-strip";
+import { ForecastChart } from "@/components/waterline/forecast-chart";
 import { Money } from "@/components/waterline/money";
 import { SectionLabel, StatusDot, SkeletonCard } from "@/components/waterline/primitives";
 import { WlIcon } from "@/components/waterline/icons";
@@ -332,6 +333,7 @@ export function CashView() {
   const setView = useUi((s) => s.setView);
   const { data: overview, isLoading } = useOverview();
   const { data: treasury } = useTreasury();
+  const { data: forecast, isLoading: forecastLoading } = useForecast();
 
   if (isLoading || !overview) {
     return (
@@ -386,6 +388,9 @@ export function CashView() {
           </button>
         </div>
       </div>
+
+      {/* Forward cash — 90-day advisory projection (PRD 5.2) */}
+      <ForecastChart data={forecast} isLoading={forecastLoading} />
 
       <TreasuryPanel />
     </div>

@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client";
 import type {
   OverviewDto, InvoiceDto, InvoiceDetailDto, QuoteResponse, OfferDto, PayoutDto,
-  EscrowContractDto, TreasuryDto, StatusDto, ActivityEventDto, DecisionDto, AuditDto, ConsentDto,
+  EscrowContractDto, TreasuryDto, ForecastDto, StatusDto, ActivityEventDto, DecisionDto, AuditDto, ConsentDto,
 } from "@/lib/types";
 
 export function useOverview() {
@@ -71,6 +71,7 @@ export function useAcceptOffer() {
       qc.invalidateQueries({ queryKey: ["overview"] });
       qc.invalidateQueries({ queryKey: ["invoice"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["forecast"] });
     },
   });
 }
@@ -124,6 +125,7 @@ export function useSettleInvoice() {
       qc.invalidateQueries({ queryKey: ["overview"] });
       qc.invalidateQueries({ queryKey: ["treasury"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["forecast"] });
     },
   });
 }
@@ -146,6 +148,7 @@ export function useMilestoneAction() {
       qc.invalidateQueries({ queryKey: ["overview"] });
       qc.invalidateQueries({ queryKey: ["treasury"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["forecast"] });
     },
   });
 }
@@ -166,12 +169,26 @@ export function useTreasury() {
   return useQuery({ queryKey: ["treasury"], queryFn: () => api.get<TreasuryDto>("/api/treasury") });
 }
 
+// Forward cash projection (PRD 5.2) — advisory, deterministic, 90 days.
+export function useForecast() {
+  return useQuery({
+    queryKey: ["forecast"],
+    queryFn: () => api.get<ForecastDto>("/api/treasury/projection"),
+    // The projection moves with every money event; a slow poll keeps the
+    // chart honest without hammering the read path.
+    refetchInterval: 60_000,
+  });
+}
+
 export function useUpdatePolicy() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: Partial<{ floorFils: number; horizonDays: number; safetyMarginPermyriad: number; autoPilotEnabled: boolean }>) =>
       api.put<{ policy: TreasuryDto["policy"] }>("/api/treasury/policy", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["treasury"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["treasury"] });
+      qc.invalidateQueries({ queryKey: ["forecast"] });
+    },
   });
 }
 
@@ -184,6 +201,7 @@ export function useSweep() {
       qc.invalidateQueries({ queryKey: ["treasury"] });
       qc.invalidateQueries({ queryKey: ["overview"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["forecast"] });
     },
   });
 }
@@ -196,6 +214,7 @@ export function useRecall() {
       qc.invalidateQueries({ queryKey: ["treasury"] });
       qc.invalidateQueries({ queryKey: ["overview"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["forecast"] });
     },
   });
 }
@@ -205,7 +224,10 @@ export function useAddObligation() {
   return useMutation({
     mutationFn: (data: { label: string; dueDate: string; amountFils: number }) =>
       api.post<{ obligation: unknown }>("/api/treasury/obligations", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["treasury"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["treasury"] });
+      qc.invalidateQueries({ queryKey: ["forecast"] });
+    },
   });
 }
 

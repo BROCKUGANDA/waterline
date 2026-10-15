@@ -51,7 +51,16 @@ function StatusTab() {
     operator.mutate(
       { ...payload, reason: reason || "operator console", confirm: true },
       {
-        onSuccess: () => { toast.success(`${T.ops.applyMode} ✓`); setConfirmMode(null); setReason(""); },
+        onSuccess: (res) => {
+          toast.success(`${T.ops.applyMode} ✓`);
+          // When the rail returns, the queue drains server-side — surface the
+          // release count so the operator sees the causal effect (PRD Part 8).
+          if (res.queueDrained && res.queueDrained > 0) {
+            toast(T.ops.queueDrained(res.queueDrained), { duration: 6000 });
+          }
+          setConfirmMode(null);
+          setReason("");
+        },
         onError: (e) => toast.error(e instanceof Error ? e.message : T.errors.generic),
       }
     );

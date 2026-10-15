@@ -237,8 +237,39 @@ export async function advancePayoutPipeline(p: Payout): Promise<Payout> {
       data.reconciledAt = new Date();
     }
     data.state = STAGE_KEYS[target];
+
+    // Delivery completion (posted exactly once, idempotent on its source
+    // event): the moment the payout SETTLES, the advance is delivered to the
+    // SME's du Pay wallet — the wallet the UI calls "Available now" must
+    // move when money actually arrives. The funding txn credited the pool
+    // with the net at accept; delivery debits it back and credits the
+    // wallet. Net effect on the pool: zero. Double-entry stays balanced.
+    if (target >= 3) {
+      try {
+        await postTransaction({
+          tenantId: p.tenantId,
+          txnId: `txn_${shortId("d")}`,
+          sourceEventId: `payout.settled:${p.id}`,
+          valueDate: new Date(),
+          entries: [
+            { accountCode: LEDGER_ACCOUNTS.FUNDING_POOL, direction: "debit", amountFils: p.amountFils, memo: `Advance delivered — ${p.destinationRef}` },
+            { accountCode: LEDGER_ACCOUNTS.SME_WALLET(p.tenantId), direction: "credit", amountFils: p.amountFils, memo: `Early payment received — ${p.destinationRef}` },
+          ],
+          eventType: "payout.settled",
+          eventSubjectRef: p.id,
+          eventPayload: { amountFils: p.amountFils, providerRef: p.providerRef ?? providerRefFor(p.id) },
+        });
+      } catch (e) {
+        if ((e as { code?: string }).code !== "P2002") throw e; // duplicate → already delivered
+      }
+    }
+
     await db.payout.update({ where: { id: p.id }, data });
     for (let s = observed + 1; s <= target; s++) {
+      // The settled crossing is told by the delivery event (payout.settled,
+      // written by the completion txn above) — a duplicate stage event would
+      // narrate the same moment twice in the activity feed.
+      if (s === 3) continue;
       await db.appEvent.create({
         data: {
           tenantId: p.tenantId,

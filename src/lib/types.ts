@@ -208,6 +208,42 @@ export interface TreasuryDto {
   earnedYieldFils: number;
 }
 
+export interface ForecastFlowDto {
+  label: string;
+  amountFils: number;
+  kind: "obligation" | "buyer_payment" | "reserve_release" | "escrow_release" | "autopilot_recall";
+  estimate?: boolean;
+  onCondition?: boolean;
+  recurring?: boolean;
+  confidencePermyriad?: number;
+  sourceRef: string;
+}
+
+export interface ForecastDayDto {
+  date: string;
+  startFils: number;
+  inflows: ForecastFlowDto[];
+  outflows: ForecastFlowDto[];
+  endFils: number;
+}
+
+export interface ForecastDto {
+  asOf: string;
+  horizonDays: number;
+  startFils: number;
+  floorFils: number;
+  autoPilotEnabled: boolean;
+  days: ForecastDayDto[];
+  minBalance: { date: string; endFils: number; aboveFloor: boolean };
+  summary: {
+    totalInFils: number;
+    totalOutFils: number;
+    projectedEndFils: number;
+    floorBreachDays: string[];
+  };
+  advisory: string;
+}
+
 export interface StatusDto {
   mode: "M0" | "M1" | "M2" | "M3" | "M4";
   message: string | null;
@@ -215,6 +251,8 @@ export interface StatusDto {
   breakers: Record<string, string>;
   updatedAt: string;
   modeCatalog: ModeInfo[];
+  /** POST only: how many queued payouts were released when the rail returned. */
+  queueDrained?: number;
 }
 
 export interface ModeInfo {
