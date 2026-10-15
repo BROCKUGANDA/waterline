@@ -79,6 +79,21 @@ export function renderActivityEventAr(ev: ActivityEventDto): EventCopy {
             ? "انحرفت الإعادة عن النتيجة الأصلية — يُرسب هذا البناء ويُمنع الترويج."
             : "طابقت الإعادة النتيجة الأصلية حرفياً (اختبار الانحدار الليلي).",
       };
+    case "canary.promoted":
+      return {
+        title: "رُقّي الكناري",
+        detail: `حزمة القواعد المرشحة ${str("candidateVersion") ?? ""} تخدم ${(((num("trafficPermyriad") ?? 0) / 100) || 5).toFixed(1)}٪ من طلبات التسعير (دلو حتمي). ${str("reason") ?? ""}`.trim(),
+      };
+    case "canary.withdrawn":
+      return {
+        title: "سُحب الكناري",
+        detail: `${str("reason") ?? "قرار المشغّل"} — الحزمة الأساسية تخدم كل الطلبات مجدداً. العروض المسعّرة بالمرشحة تُعاد تسعيرتها بالسعر الأساسي.`,
+      };
+    case "canary.rolled_back":
+      return {
+        title: "سُحب الكناري آلياً",
+        detail: `${str("reason") ?? "تصعيد الحواجز الوقائية سحب الكناري"} — دون انتظار إنسان.`,
+      };
     case "offer.accepted":
       return {
         title: "قُبل الدفع المبكر",
@@ -196,17 +211,28 @@ export function renderActivityEventAr(ev: ActivityEventDto): EventCopy {
     }
     case "guardrail.triggered": {
       const unit = str("unit") ?? "permyriad";
-      const isRail = str("guardrail") === "railBreaker";
+      const key = str("guardrail") ?? "";
+      const isRail = key === "railBreaker";
+      const isCeiling = key === "portfolioCeiling";
+      const isIntegrity = key === "replayIntegrity";
       const fmtValue = (v: number | null) =>
-        v === null ? null : unit === "permyriad" ? `٪${(v / 100).toFixed(0)}` : unit === "fils" ? formatAedAr(v) : isRail ? (v >= 1 ? "مفتوح" : "مغلق") : String(v);
+        v === null ? null
+        : isIntegrity ? (v >= 1 ? `${v} إعادات تشغيل مخالفة` : `${v} مخالفات`)
+        : isCeiling ? (v >= 0 ? `${formatAedAr(v)} هامشاً تحت السقف` : `${formatAedAr(-v)} فوق السقف النشط`)
+        : unit === "permyriad" ? `٪${(v / 100).toFixed(0)}`
+        : unit === "fils" ? formatAedAr(v)
+        : isRail ? (v >= 1 ? "مفتوح" : "مغلق")
+        : String(v);
       const valueLabel = fmtValue(num("value"));
-      const bandLabel = unit === "permyriad" ? `٪${((num("band") ?? 0) / 100) | 0}` : unit === "fils" ? "≥ ٠" : isRail ? "مغلق" : "٠";
-      const m2 = str("mode") === "M2";
+      const bandLabel = isCeiling ? "≥ ٠ هامشاً" : isIntegrity ? "٠ مخالفات" : unit === "permyriad" ? `٪${((num("band") ?? 0) / 100) | 0}` : unit === "fils" ? "≥ ٠" : isRail ? "مغلق" : "٠";
+      const mode = str("mode");
+      const tail =
+        mode === "M3" ? "طُبّق الوضع M3 آلياً؛ التمويل موقوف — لا تمويلاً جديداً، وأموالك القائمة تعمل"
+        : mode === "M2" ? "طُبّق الوضع M2 آلياً؛ تُحترم العروض بالسعر المقفل وتنتظر القبولات في الطابور ولا تتحرك أي أموال"
+        : "طُبّق الوضع الحذر M1 آلياً؛ تُشدَّد الحدود والسعر لا يتغير";
       return {
         title: "عُبِر حاجز وقائي",
-        detail: m2
-          ? `${str("guardrail") ?? "حاجز وقائي"} تجاوز نطاق التحذير (${valueLabel ?? "—"} مقابل ${bandLabel ?? "—"}) — طُبّق الوضع M2 آلياً؛ تُحترم العروض بالسعر المقفل وتنتظر القبولات في الطابور ولا تتحرك أي أموال.`
-          : `${str("guardrail") ?? "حاجز وقائي"} تجاوز نطاق التحذير (${valueLabel ?? "—"} مقابل ${bandLabel ?? "—"}) — طُبّق الوضع الحذر M1 آلياً؛ تُشدَّد الحدود والسعر لا يتغير.`,
+        detail: `${key || "حاجز وقائي"} تجاوز نطاق التحذير (${valueLabel ?? "—"} مقابل ${bandLabel ?? "—"}) — ${tail}.`,
       };
     }
     case "invoice.dispute_resolved":

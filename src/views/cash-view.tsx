@@ -230,7 +230,7 @@ function TreasuryPanel() {
             type="button"
             disabled={projection.sweepableFils < 500_000}
             onClick={doSweep}
-            className="mt-3 w-full h-11 rounded-md bg-treasury-w text-white type-body-strong press-scale disabled:opacity-40 disabled:cursor-not-allowed elev-1"
+            className="mt-3 w-full h-11 rounded-md bg-treasury-deep text-white type-body-strong press-scale disabled:opacity-40 disabled:cursor-not-allowed elev-1"
           >
             {T.cash.sweepNow}
           </button>

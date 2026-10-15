@@ -64,9 +64,31 @@ export interface DecisionDto {
   evaluatedAt: string;
   actor: string;
   shadow: boolean;
+  /** PRD 3.3 canary: true when this live decision was served by the candidate
+   *  pack through the deterministic 5% bucket. */
+  canary?: boolean;
   featureSnapshot?: unknown;
   checks?: DecisionCheck[];
   subjectLabel?: string;
+}
+
+/** PRD 3.3 canary phase — published on /api/decisions. */
+export interface CanaryView {
+  active: boolean;
+  since: string | null;
+  trafficPermyriad: number;
+  promotedBy: string | null;
+  reason: string | null;
+  candidateVersion: string;
+  canaryDiff: {
+    routed: number;
+    lastRoutedAt: string | null;
+    approvalsGained: number;
+    approvalsLost: number;
+    limitMoves: number;
+    priceMoves: number;
+    examples: { label: string; canaryOutcome: string; canaryLimitFils: number | null; baseOutcome: string; baseLimitFils: number | null }[];
+  };
 }
 
 export interface QuoteResponse {
@@ -266,11 +288,11 @@ export interface StatusDto {
   queueDrained?: number;
   /** Automatic guardrails (PRD Part 8) — live telemetry with fixed warning
    *  bands, plus the record of the last auto-escalation (M1 cautious / M2
-   *  quote-only). */
+   *  quote-only / M3 funding suspended). */
   guardrails?: {
     evaluatedAt: string;
     metrics: {
-      key: "disputeRate" | "lossRate" | "coverage30d" | "reconBreaks" | "railBreaker";
+      key: "disputeRate" | "lossRate" | "coverage30d" | "reconBreaks" | "railBreaker" | "portfolioCeiling" | "replayIntegrity";
       value: number;
       band: number;
       unit: "permyriad" | "fils" | "count";
@@ -279,7 +301,7 @@ export interface StatusDto {
     }[];
     autoTriggeredNow: boolean;
     lastAutoEpisode: string | null;
-    lastAutoMode: "M1" | "M2" | null;
+    lastAutoMode: "M1" | "M2" | "M3" | null;
     autoReason: string | null;
   } | null;
 }

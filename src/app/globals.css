@@ -30,13 +30,16 @@
   --wl-accent-money: #2783DE;
 
   /* ── Semantics ──────────────────────────────────────────────────────── */
-  --wl-success: #1E8E5A;
+  --wl-success: #168552; /* 4.65:1 on paper — positive money figures stay AA-readable at caption size */
   --wl-caution: #B8860B;
   --wl-caution-dark: #7A5C08;
   --wl-caution-soft: #F7EDD8;
   --wl-danger: #C23B22;
   --wl-escrow: #6B4FA8;
   --wl-treasury: #0F7F8C;
+  /* Filled treasury controls (Sweep now): same hue, guaranteed ≥4.5:1 for
+     white labels in BOTH themes — text accents keep using --wl-treasury. */
+  --wl-treasury-deep: #0F7F8C;
   --wl-neutral-mute: #8C867E;
 
   /* ── Elevation (exactly four levels) ────────────────────────────────── */
@@ -122,6 +125,9 @@
   --wl-danger: #E05A44;
   --wl-escrow: #9B7FD0;
   --wl-treasury: #3BA8B5;
+  /* 4.77:1 for white labels on the filled control (the brighter text token
+     would be 2.82:1). */
+  --wl-treasury-deep: #1C7E8A;
 
   --wl-elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --wl-elev-2: 0 4px 12px rgba(0, 0, 0, 0.45);
@@ -186,6 +192,7 @@
   --color-danger-w: var(--wl-danger);
   --color-escrow-w: var(--wl-escrow);
   --color-treasury-w: var(--wl-treasury);
+  --color-treasury-deep: var(--wl-treasury-deep);
   --color-mute: var(--wl-neutral-mute);
 
   --color-sidebar-ring: var(--sidebar-ring);
@@ -319,10 +326,13 @@ body {
 
 /* ── The five permitted gradients (PRD 11.3) ───────────────────────────── */
 .grad-liquidity {
-  background-image: linear-gradient(180deg, #2783de 0%, #1b5fa3 100%);
+  /* Top stop darkened one step so white CTA labels clear WCAG AA (4.63:1)
+     across the whole gradient — the brand hue is unchanged. */
+  background-image: linear-gradient(180deg, #1f77cb 0%, #1b5fa3 100%);
 }
 .dark .grad-liquidity {
-  background-image: linear-gradient(180deg, #4d9be8 0%, #1b5fa3 100%);
+  /* 4.64:1 for white labels on dark paper (was 2.94:1 at the old top). */
+  background-image: linear-gradient(180deg, #2377c9 0%, #1b5fa3 100%);
 }
 .grad-lift {
   background-image: linear-gradient(180deg, var(--wl-paper) 0%, var(--wl-paper-warm) 100%);

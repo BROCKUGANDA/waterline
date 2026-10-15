@@ -103,9 +103,15 @@ model Decision {
   evaluatedAt         DateTime @default(now())
   actor               String   @default("system")
   shadow              Boolean  @default(false)
+  // PRD 3.3 canary phase: true when this LIVE decision was routed to the
+  // candidate pack by the deterministic canary bucket (5% of quote traffic
+  // while the canary is promoted). The row records the pack that actually
+  // decided, so replay stays byte-identical either way.
+  canary              Boolean  @default(false)
 
   @@index([tenantId, subjectRef])
   @@index([inputHash])
+  @@index([canary])
 }
 
 // ── Offers ──────────────────────────────────────────────────────────────────
@@ -292,6 +298,11 @@ model StatusState {
   // so automation escalates once per distinct episode and a human revert
   // within the same episode is a deliberate override, not a fight.
   guardrailEpisodeJson String?
+  // PRD 3.3 canary phase: null = candidate pack not canaried; otherwise
+  // { since, trafficPermyriad, promotedBy, reason } — the candidate serves
+  // the deterministic canary bucket of quote traffic while M0 holds. Any
+  // automatic guardrail escalation withdraws the canary (auto-rollback).
+  canaryJson            String?
   updatedAt       DateTime @updatedAt
 }
 

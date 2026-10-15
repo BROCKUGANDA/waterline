@@ -48,6 +48,9 @@ const typeIcon: Record<string, WlIconName> = {
   "onboarding.completed": "buyer",
   "reserve.released": "arrow-in",
   "advisor.qa": "advisor",
+  "canary.promoted": "rule-pack",
+  "canary.withdrawn": "rule-pack",
+  "canary.rolled_back": "status-degraded",
 };
 
 const typeTone: Record<string, string> = {
@@ -67,6 +70,9 @@ const typeTone: Record<string, string> = {
   "payout.queued": "text-caution-w bg-caution-w/10",
   "payout.released": "text-accent-w bg-accent-w-soft",
   "advisor.qa": "text-accent-w bg-accent-w-soft",
+  "canary.promoted": "text-accent-w bg-accent-w-soft",
+  "canary.withdrawn": "text-caution-w bg-caution-w/10",
+  "canary.rolled_back": "text-caution-w bg-caution-w/10",
 };
 
 function EventRow({ event, index }: { event: ActivityEventDto; index: number }) {

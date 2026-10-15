@@ -105,6 +105,18 @@ function renderEvent(ev: AppEvent, ctx: Enrichment): RenderedEvent {
         ? "Replay DIVERGED from the original outcome — this fails the build and blocks promotion."
         : "Replay matched the original outcome byte-for-byte (nightly regression).";
       break;
+    case "canary.promoted":
+      title = "Canary promoted";
+      detail = `Candidate rule pack ${str("candidateVersion") ?? ""} promoted to ${(((num("trafficPermyriad") ?? 0) / 100) || 5).toFixed(1)}% of quote traffic (deterministic bucket). ${str("reason") ?? ""}`.trim();
+      break;
+    case "canary.withdrawn":
+      title = "Canary withdrawn";
+      detail = `${str("reason") ?? "Operator decision"} — the base pack serves all traffic again. Offers quoted under the candidate re-quote at the base price.`;
+      break;
+    case "canary.rolled_back":
+      title = "Canary rolled back automatically";
+      detail = `${str("reason") ?? "A guardrail escalation withdrew the canary"} — no human waited on it.`;
+      break;
     case "offer.accepted":
       title = "Early payment accepted";
       detail = `${aed("netProceedsFils") ?? formatAed(num("principalFils") ?? 0)} net to du Pay — ${num("daysEarly") ?? "?"} days early, fee ${aed("feeFils") ?? "0"}.`;
@@ -209,16 +221,30 @@ function renderEvent(ev: AppEvent, ctx: Enrichment): RenderedEvent {
     case "guardrail.triggered": {
       title = "Guardrail crossed";
       // Permyriad metrics read as percent; fils read as dirhams. The rail
-      // breaker reads as its state, and its band is the acceptable state
-      // (closed) — never a bare count.
+      // breaker reads as its state, the portfolio ceiling as dirhams over
+      // the active ceiling, and replay integrity as a mismatch count — each
+      // band is the acceptable state, never a bare number.
       const unit = str("unit") ?? "permyriad";
-      const isRail = str("guardrail") === "railBreaker";
+      const key = str("guardrail") ?? "";
+      const isRail = key === "railBreaker";
+      const isCeiling = key === "portfolioCeiling";
+      const isIntegrity = key === "replayIntegrity";
       const fmtValue = (v: number | null) =>
-        v === null ? null : unit === "permyriad" ? `${(v / 100).toFixed(0)}%` : unit === "fils" ? formatAed(v) : isRail ? (v >= 1 ? "open" : "closed") : String(v);
+        v === null ? null
+        : isIntegrity ? (v >= 1 ? `${v} mismatched replays` : `${v} mismatches`)
+        : isCeiling ? (v >= 0 ? `${formatAed(v)} of ceiling headroom` : `${formatAed(-v)} over the active ceiling`)
+        : unit === "permyriad" ? `${(v / 100).toFixed(0)}%`
+        : unit === "fils" ? formatAed(v)
+        : isRail ? (v >= 1 ? "open" : "closed")
+        : String(v);
       const valueLabel = fmtValue(num("value"));
-      const bandLabel = unit === "permyriad" ? `${(num("band") ?? 0) / 100 | 0}%` : unit === "fils" ? "≥ 0" : isRail ? "closed" : "0";
-      const m2 = str("mode") === "M2";
-      detail = `${str("guardrail") ?? "A guardrail"} crossed its warning band (${valueLabel ?? "—"} vs band ${bandLabel ?? "—"}) — ${m2 ? "M2 applied automatically; quotes honoured at the locked price, acceptances queue, no money moves" : "M1 applied automatically; limits tighten, pricing unchanged"}.`;
+      const bandLabel = isCeiling ? "≥ 0 headroom" : isIntegrity ? "0 mismatches" : unit === "permyriad" ? `${(num("band") ?? 0) / 100 | 0}%` : unit === "fils" ? "≥ 0" : isRail ? "closed" : "0";
+      const mode = str("mode");
+      const tail =
+        mode === "M3" ? "M3 applied automatically; funding suspended — no new funding, existing money keeps working"
+        : mode === "M2" ? "M2 applied automatically; quotes honoured at the locked price, acceptances queue, no money moves"
+        : "M1 applied automatically; limits tighten, pricing unchanged";
+      detail = `${key || "A guardrail"} crossed its warning band (${valueLabel ?? "—"} vs band ${bandLabel ?? "—"}) — ${tail}.`;
       break;
     }
     case "invoice.dispute_resolved":

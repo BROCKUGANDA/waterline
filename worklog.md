@@ -418,3 +418,57 @@ Goals this round: (a) fix anything QA found, (b) M2 auto-degrade from breaker te
   3. Sweep-the-projected-surplus: autopilot forward-planning that invests the forecast surplus beyond day 30 (ties the projection to the treasury loop).
   4. Localize the remaining server-rendered activity copy into the modeCatalog/packDelta server-side (currently client-mirrored via activity-ar.ts).
   5. E07 drill one-click from the invoices view (currently ops-console only).
+
+---
+Task ID: 10 (main agent) — IN PROGRESS
+Agent: main-orchestrator (Z.ai Code)
+Task: Round 10 — QA baseline, M3 auto-degrade (portfolio ceiling + replay integrity), PRD 3.3 canary phase with auto-rollback, styling pass, more features.
+
+Work Log (partial — round in progress):
+- QA BASELINE: dev server up, lint clean, tsc clean (project files), /api/status M0 pristine, ledger balanced 9 txns / 0 breaks, wallet AED 123,285.09. agent-browser sweep: all 5 views 0 console errors (EN + AR dark + mobile 375px), no horizontal overflow. No bugs found — baseline stable.
+- FEATURE 1 — M3 AUTO-DEGRADE (the last catalog line without automation): guardrails.ts now publishes 7 metrics (added portfolioCeiling: headroom = ACTIVE pack ceiling − funded-book exposure, band headroom < 0, detail names exposure vs ceiling vs pack version; replayIntegrity: the 20 most-recent live decisions replayed byte-identically against their recorded packs, any mismatch = integrity breach). M3_GUARDRAIL_KEYS; strictest-crossed-class wins (M3 > M2 > M1); escalation fires from M0 (any class) and from M1 for an M3-class breach — the honest cascade: the cautious delta tightens the ceiling below the live book. guardrail_auto_m3 operator action; mode-aware reason text persists on the episode record. types.ts + i18n EN/AR (labels, headroom/overCeiling wording, autoAppliedM3) + ops-view (key-aware fmtValue/fmtBand before unit branching, M3 banner sentence) + activity route EN + activity-ar.ts AR (mode-aware tails, ceiling/integrity value+band formatting).
+- VERIFIED END-TO-END: submitted ESS-INV-M3TEST (buyer_api) + funded all 4 ready invoices (book AED 124,425 = 12,442,500 fils) → dispute flagged (disputeRate 22% ≥ 20%) → heartbeat auto-M1 (cautious ceiling AED 100,000) → next heartbeat auto-M3 (headroom −AED 24,425, episode disputeRate+portfolioCeiling). Under M3: fresh quote APPROVED (pricing honest), acceptance blocked 423 kill_switch_active with the full suspension sentence, payouts settled + sweep executed (existing money keeps working), ledger balanced 13 txns. Activity feed narrates the full cascade EN; ops panel renders 7 cards + M3 banner EN/AR, mobile no overflow. Recovery: dispute resolved (operator) → episode cleared → operator revert M0 (two-person reason) → all guardrails clear. Audit trail: dispute_flag → guardrail_auto_m1 → guardrail_auto_m3 → dispute_resolve → mode_transition.
+- Next: reset demo DB, then FEATURE 2 — PRD 3.3 canary phase.
+
+---
+Task ID: 10 (main agent) — continued
+Agent: main-orchestrator (Z.ai Code)
+Task: Round 10 continuation — PRD 3.3 canary phase, accessibility styling pass, final verification.
+
+Work Log (continuation):
+- FEATURE 2 — PRD 3.3 CANARY PHASE (Author → Shadow → CANARY → Promote, phase 3):
+  - Schema: StatusState.canaryJson (null = not canaried; else {since, trafficPermyriad, promotedBy, reason}) + Decision.canary (indexed). bun run db:push; dev server restarted (the running process held the stale Prisma client — root-caused via "Unknown argument canaryJson" in dev.log; pkill of the actual `next dev` PID then the nohup pattern).
+  - src/lib/canary.ts: CANARY_TRAFFIC_PERMYRIAD = 500 (published 5%); canaryState() (malformed record → null, base is the safe default); canaryBucket(inputHash) = last-8-hex % 10,000 (deterministic, same hash → same bucket forever); routesToCanary (M0 + canary active + bucket < 500); setCanary (transactional: state write + OperatorAction); autoRollbackCanary (best-effort, idempotent).
+  - Quote route: inputHash hoisted before the decision; canary routing selects CANDIDATE_PACK for the live decision (row records canary: true + the candidate version); PARALLEL SCORING generalised — canary-routed quotes write a BASE-pack shadow (the counterfactual), base-live quotes keep the candidate shadow, so every quote yields a base↔candidate pair.
+  - Accept route: canary-aware pack validation — the offer's decision is replayed against the pack RECORDED on it (PRD 3.2 exactness); a candidate-version decision is valid only while M0 + canary still active; anything else 409 "rule pack changed — re-quoted, never applied silently".
+  - Guardrail engine: any automatic escalation (M1/M2/M3) auto-rolls-back the canary (OperatorAction canary_auto_rollback by system:guardrails + canary.rolled_back event).
+  - POST /api/ops/canary {promote|withdraw}: two-person reason, idempotent, M0-only promotion (honest rejection under any other mode), audited + activity events (canary.promoted/withdrawn/rolled_back rendered EN + AR with icons/tones).
+  - Decisions route: canary block {active, since, traffic, promotedBy, reason, candidateVersion, canaryDiff} — live canary rows joined to their base shadows by inputHash (routed/gained/lost/limitMoves/priceMoves/examples); shadowDiff join hardened to base-live rows only (a canary live row could otherwise pair with a candidate shadow and understate the diff).
+  - Ops console: CanaryCard on the guardrails tab (live/idle state strip, 5 diff metric cards, examples, promote/withdraw with the shared two-person reason, honest note) + "canary live" chip on the decisions-tab shadow panel + per-row canary chip on decision rows. i18n EN/AR full mirrors. API map: /api/ops/canary (32 routes).
+  - VERIFIED END-TO-END: promote (audited) → 15 live quotes → 2 routed (buckets 99, 469) with 0 mismatches between the canary flag and the deterministic bucket → canary decision records 2026.11.0-rc1, replays byte-identically → accept under active canary OK (payout created) → canaryDiff routed 2, limitMoves 2 (88% vs 90%), priceMoves 2 (2.5 vs 2.6 bps/day), examples exact (AED 4,400 canary vs AED 4,500 base) → breaker open → auto-M2 → canary AUTO-WITHDRAWN (audit: system:guardrails canary_auto_rollback) → stale canary offer after withdrawal → honest 409 "2026.11.0-rc1 is no longer deciding" → promote under M1 rejected honestly → recovery verified. UI: idle/live/chip/AR verified, mobile 375px no overflow.
+- STYLING PASS (programmatic WCAG audit — the VLM endpoint rejects the sandbox token with 401, so the review ran as an in-browser contrast/clipping audit across all 5 views × light + dark, gradient-aware):
+  - FIXED reason-input label 3.27:1 (text-caution-w → text-caution-w-dark).
+  - FIXED light success token 4.14:1 (#1E8E5A → #168552, 4.65:1 — positive money figures at caption size).
+  - FIXED accent text usages 3.92:1 (nav active label, days-early figure, day-selector pill → text-accent-w-dark, 6.66:1 light / 6.6:1 dark).
+  - FIXED grad-liquidity CTA labels: light top stop #2783DE 3.92:1 → #1F77CB (4.63:1); dark top stop #4D9BE8 2.94:1 → #2377C9 (4.64:1).
+  - FIXED dark "Sweep now" 2.82:1: new --wl-treasury-deep token for filled treasury controls (dark #1C7E8A, 4.77:1) — text accents keep the brighter token (same split pattern as accent/caution).
+  - Audit result after fixes: ALL 5 views ALL_PASS light + dark (captions, values, labels, body ≥4.5:1; zero clipped cards; gradient false-positives excluded by construction).
+- FINAL VERIFICATION: lint clean; tsc clean (project files); pristine reset (M0, base pack 2026.10.3, canary off, ledger balanced 9 txns, 9 seed invoices); EN light + AR dark + mobile 375px sweeps: 0 console errors, 0 page errors, no horizontal overflow, style audit ALL_PASS.
+- Screenshots: download/qa-r12-*.png (m3 guardrails, m3 sme banner, m3 ops AR, canary idle/live/decisions-chip/AR/mobile, dark invoices, final ops light).
+
+Stage Summary:
+
+## 1. Current project status assessment
+- WATERLINE remains feature-complete and STABLE for the Phase-1 demo scope. Round 10 added the last two automation gaps: M3 auto-degrade and the PRD 3.3 canary phase. The full degrade-mode catalog (M0–M4) now has automation for every internal trigger: M1 (loss/dispute/forecast), M2 (rail breaker/recon breaks), M3 (portfolio ceiling/replay integrity), M4 stays operator/datastore-driven by nature; the rule-pack promotion lifecycle now covers Author → Shadow → Canary with automatic rollback; recovery remains human everywhere.
+
+## 2. Current goals / completed modifications / verification results
+Goals this round: (a) QA baseline, (b) M3 auto-degrade, (c) canary phase, (d) mandatory styling, (e) verification. ALL COMPLETED — see the two Work Log sections above for the full evidence trails (every path verified end-to-end with exact integer arithmetic, audit trail, and UI in EN + AR, light + dark, mobile).
+
+## 3. Unresolved issues / risks + next-phase priority recommendations
+- None outstanding. Known limitations (by design): the canary bucket is per-quote-request (a snapshot change — e.g. book exposure moving — re-buckets the next quote of the same invoice; each decision row records its pack so replay stays exact); canary promotion is single-tenant demo-scoped (tenant-scoped promotion is the production shape); replayIntegrity covers the 20 most-recent live decisions; the sandbox VLM endpoint rejects the local token (401) — visual QA ran as a programmatic WCAG audit instead (more objective for contrast; less capable for subjective polish).
+- Next-phase candidates (priority order):
+  1. Promote phase of PRD 3.3: risk-committee sign-off action that swaps the candidate into the base slot (registry already supports multiple versions; the promote endpoint + pack-slot swap + full-history replay regression).
+  2. Sweep-the-projected-surplus: autopilot forward-planning that invests the forecast surplus beyond day 30 (ties the projection to the treasury loop).
+  3. M3 review clock: the catalog's "expected review time" as an operator-set countdown surfaced on the SME banner.
+  4. E07 drill one-click from the invoices view (currently ops-console only).
+  5. Nightly replay regression over the FULL decision history (extends the integrity guardrail's window).

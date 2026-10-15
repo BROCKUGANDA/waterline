@@ -84,7 +84,7 @@ function MobileTabButton({
         />
       )}
       <WlIcon name={n.icon} size={22} filled={active} className={active ? "text-accent-w" : "text-ink-400"} />
-      <span className={cn("type-caption", active ? "text-accent-w font-semibold" : "text-ink-400")}>{n.label(lang)}</span>
+      <span className={cn("type-caption", active ? "text-accent-w-dark font-semibold" : "text-ink-400")}>{n.label(lang)}</span>
     </button>
   );
 }

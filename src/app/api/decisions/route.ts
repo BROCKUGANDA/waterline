@@ -5,11 +5,16 @@
 // pack's shadow rows are joined to their live twins by inputHash (same feature
 // snapshot) and the outcome deltas are counted: approvals gained/lost, limit
 // moves, price moves — exactly what the risk committee reviews before signing.
+// Additive (Round 10): canary + canaryDiff — the CANARY phase of the same
+// lifecycle. Live decisions routed to the candidate (canary: true) are joined
+// to their base-pack counterfactual shadows, so the operator sees what the 5%
+// bucket actually received vs what the base pack would have served.
 
 import { db } from "@/lib/db";
 import { ok, errors, DEMO_TENANT } from "@/lib/api";
 import { ensureSeed } from "@/lib/seed";
-import { CANDIDATE_PACK_VERSION, CANDIDATE_DELTA_SUMMARY } from "@/lib/rulepacks";
+import { CANDIDATE_PACK_VERSION, CANDIDATE_DELTA_SUMMARY, BASE_PACK_VERSION } from "@/lib/rulepacks";
+import { canaryState } from "@/lib/canary";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +37,10 @@ export async function GET(req: Request) {
       orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
       take: limit,
     });
+
+    // The canary state (null = not promoted) — published so the ops console
+    // renders the live lifecycle state, never a guess.
+    const canary = await canaryState();
 
     // Resolve subject labels for the refs (invoice numbers, sweep instruments).
     const invoiceRefs = rows
@@ -79,15 +88,19 @@ export async function GET(req: Request) {
       where: { tenantId: DEMO_TENANT, decisionType: "advance_offer" },
       orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
       select: {
-        inputHash: true, shadow: true, rulepackVersion: true, outcome: true,
+        inputHash: true, shadow: true, canary: true, rulepackVersion: true, outcome: true,
         limitFils: true, priceMilliBpsPerDay: true, subjectRef: true, evaluatedAt: true,
       },
     });
     const latestByHash = new Map<string, { live?: (typeof allAdvance)[number]; shadow?: (typeof allAdvance)[number] }>();
     for (const d of allAdvance) {
       const entry = latestByHash.get(d.inputHash) ?? {};
+      // Shadow phase pairs: BASE-pack live rows vs CANDIDATE-pack shadow rows.
+      // Canary-routed live rows (candidate version, canary: true) belong to
+      // the canaryDiff — never to this join, or a candidate-live could pair
+      // with a candidate-shadow and understate the diff.
       if (d.shadow && d.rulepackVersion === CANDIDATE_PACK_VERSION && !entry.shadow) entry.shadow = d;
-      if (!d.shadow && !entry.live) entry.live = d;
+      if (!d.shadow && !d.canary && !entry.live) entry.live = d;
       latestByHash.set(d.inputHash, entry);
     }
     let shadowPairs = 0, approvalsGained = 0, approvalsLost = 0, limitMoves = 0, priceMoves = 0;
@@ -135,6 +148,7 @@ export async function GET(req: Request) {
         inputHash: d.inputHash,
         actor: d.actor,
         shadow: d.shadow,
+        canary: d.canary,
         evaluatedAt: d.evaluatedAt.toISOString(),
       })),
       shadowDiff: {
@@ -148,9 +162,77 @@ export async function GET(req: Request) {
         examples,
         note: "Shadow rows decide nothing — they record what the candidate pack WOULD have decided on the same snapshot. Promotion is a risk-committee decision.",
       },
+      // ── Canary phase (PRD 3.3): the live lifecycle state + what the routed
+      //    traffic actually received vs the base counterfactual.
+      canary: {
+        active: canary !== null,
+        since: canary?.since ?? null,
+        trafficPermyriad: canary?.trafficPermyriad ?? 0,
+        promotedBy: canary?.promotedBy ?? null,
+        reason: canary?.reason ?? null,
+        candidateVersion: CANDIDATE_PACK_VERSION,
+        // The canary diff: live canary-routed rows (canary: true) joined to
+        // their BASE-pack shadow twins by inputHash — the counterfactual the
+        // platform recorded at quote time. advisory, complete arithmetic.
+        canaryDiff: canaryDiffBlock(allAdvance, subjectLabels),
+      },
     });
   } catch (e) {
     console.error("[api/decisions GET]", e);
     return errors.internal();
   }
+}
+
+/** Canary-routed live rows vs their base-pack counterfactual shadows.
+ *  Mirrors the shadowDiff join discipline: latest per inputHash, advisory,
+ *  every number derived from the append-only store. */
+function canaryDiffBlock(
+  allAdvance: { inputHash: string; shadow: boolean; canary: boolean; rulepackVersion: string; outcome: string; limitFils: number | null; priceMilliBpsPerDay: number | null; subjectRef: string; evaluatedAt: Date }[],
+  subjectLabels: Map<string, string>,
+): {
+  routed: number;
+  lastRoutedAt: string | null;
+  approvalsGained: number;
+  approvalsLost: number;
+  limitMoves: number;
+  priceMoves: number;
+  examples: { label: string; canaryOutcome: string; canaryLimitFils: number | null; baseOutcome: string; baseLimitFils: number | null }[];
+} {
+  const latestByHash = new Map<string, { canaryLive?: (typeof allAdvance)[number]; baseShadow?: (typeof allAdvance)[number] }>();
+  for (const d of allAdvance) {
+    const entry = latestByHash.get(d.inputHash) ?? {};
+    if (!d.shadow && d.canary && !entry.canaryLive) entry.canaryLive = d;
+    if (d.shadow && d.rulepackVersion === BASE_PACK_VERSION && !entry.baseShadow) entry.baseShadow = d;
+    latestByHash.set(d.inputHash, entry);
+  }
+  let routed = 0, approvalsGained = 0, approvalsLost = 0, limitMoves = 0, priceMoves = 0;
+  let lastRoutedAt: string | null = null;
+  const examples: { label: string; canaryOutcome: string; canaryLimitFils: number | null; baseOutcome: string; baseLimitFils: number | null }[] = [];
+  for (const [, pair] of latestByHash) {
+    if (!pair.canaryLive) continue;
+    routed += 1;
+    const at = pair.canaryLive.evaluatedAt.toISOString();
+    if (lastRoutedAt === null || at > lastRoutedAt) lastRoutedAt = at;
+    if (!pair.baseShadow) continue;
+    const canaryApproved = pair.canaryLive.outcome !== "rejected";
+    const baseApproved = pair.baseShadow.outcome !== "rejected";
+    if (canaryApproved && !baseApproved) approvalsGained += 1;
+    if (baseApproved && !canaryApproved) approvalsLost += 1;
+    if (pair.canaryLive.limitFils !== pair.baseShadow.limitFils && canaryApproved && baseApproved) limitMoves += 1;
+    if (pair.canaryLive.priceMilliBpsPerDay !== pair.baseShadow.priceMilliBpsPerDay && canaryApproved && baseApproved) priceMoves += 1;
+    const differs =
+      pair.canaryLive.outcome !== pair.baseShadow.outcome ||
+      pair.canaryLive.limitFils !== pair.baseShadow.limitFils ||
+      pair.canaryLive.priceMilliBpsPerDay !== pair.baseShadow.priceMilliBpsPerDay;
+    if (differs && examples.length < 3) {
+      examples.push({
+        label: subjectLabels.get(pair.canaryLive.subjectRef) ?? pair.canaryLive.subjectRef,
+        canaryOutcome: pair.canaryLive.outcome,
+        canaryLimitFils: pair.canaryLive.limitFils,
+        baseOutcome: pair.baseShadow.outcome,
+        baseLimitFils: pair.baseShadow.limitFils,
+      });
+    }
+  }
+  return { routed, lastRoutedAt, approvalsGained, approvalsLost, limitMoves, priceMoves, examples };
 }

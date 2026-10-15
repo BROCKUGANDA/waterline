@@ -49,6 +49,7 @@ const ROUTES: RouteDescriptor[] = [
   { path: "/api/status", method: "GET", purpose: "Degrade mode M0–M4, kill switches, breakers — the UI never guesses", moneyMoving: false },
   { path: "/api/status", method: "POST", purpose: "Operator mode/switch changes (two-person, audited)", moneyMoving: false },
   { path: "/api/ops/e07-drill", method: "POST", purpose: "Portfolio-ceiling drill — stages the E07 scenario via the canonical routes; unwind settles the drill-funded book", moneyMoving: true },
+  { path: "/api/ops/canary", method: "POST", purpose: "PRD 3.3 canary phase — promote the candidate pack to the 5% bucket or withdraw it (two-person, audited)", moneyMoving: false },
   { path: "/api/activity", method: "GET", purpose: "Activity feed with server-rendered copy", moneyMoving: false },
   { path: "/api/audit", method: "GET", purpose: "Ledger integrity, recent entries, rounding account", moneyMoving: false },
 ];

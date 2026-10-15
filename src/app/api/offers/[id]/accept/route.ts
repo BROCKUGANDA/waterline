@@ -25,7 +25,8 @@ import {
 import { postFundingTxn, railDown } from "@/lib/payout-queue";
 import { payoutIdempotencyKey, shortId } from "@/lib/canonical";
 import { evaluateAdvance, feeFor, type FeatureSnapshot } from "@/lib/ruleengine";
-import { packForMode } from "@/lib/rulepacks";
+import { packForMode, packForVersion, CANDIDATE_PACK_VERSION } from "@/lib/rulepacks";
+import { canaryState } from "@/lib/canary";
 import { ensureSeed } from "@/lib/seed";
 import type { NextResponse } from "next/server";
 import type { Offer, Payout, StatusState } from "@prisma/client";
@@ -189,15 +190,30 @@ export async function POST(
         return problem(409, "offer_expired", "The decision behind this offer is no longer readable. Re-quote to see the current price.");
       }
       // The pack decides, always — and the pack is mode-selected (M1 runs the
-      // cautious delta). If the active pack version changed since this quote
-      // (e.g. the operator applied M1), the price is re-quoted, never applied
-      // silently — the same PRD 6.2 principle, now version-registry aware.
+      // cautious delta). If the pack that priced this offer is no longer the
+      // deciding one, the price is re-quoted, never applied silently — the
+      // same PRD 6.2 principle, now canary-aware: an offer quoted under the
+      // CANDIDATE pack (the PRD 3.3 canary bucket) is honoured only while the
+      // canary that priced it is still active; a rollback re-quotes at the
+      // base price. Replay always runs against the pack RECORDED on the
+      // decision — the version that actually decided (PRD 3.2 exactness).
       const activePack = packForMode(st?.mode);
-      if (decision.rulepackVersion !== activePack.version) {
+      const recordedPack = packForVersion(decision.rulepackVersion);
+      const canaryActive =
+        decision.rulepackVersion === CANDIDATE_PACK_VERSION &&
+        st?.mode === "M0" &&
+        (await canaryState()) !== null;
+      const validPack =
+        decision.rulepackVersion === activePack.version
+          ? activePack
+          : canaryActive && recordedPack !== null
+            ? recordedPack
+            : null;
+      if (validPack === null) {
         return problem(
           409,
           "offer_expired",
-          `The rule pack changed since this quote (${decision.rulepackVersion} → ${activePack.version}). The price is re-quoted, never applied silently.`,
+          `The rule pack changed since this quote (${decision.rulepackVersion} is no longer deciding). The price is re-quoted, never applied silently.`,
         );
       }
       let snapshot: FeatureSnapshot | null = null;
@@ -210,7 +226,7 @@ export async function POST(
         return problem(409, "offer_expired", "The priced feature snapshot is unreadable. Re-quote to see the current price.");
       }
       // Recompute from the SAME snapshot — the pack decides, always.
-      const replay = evaluateAdvance(snapshot, activePack);
+      const replay = evaluateAdvance(snapshot, validPack);
       if (replay.priceMilliBpsPerDay !== offer.rateMilliBps) {
         return problem(
           409,

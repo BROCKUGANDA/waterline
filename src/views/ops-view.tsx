@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { useStatus, useOperatorStatus, useDecisions, useReplayDecision, useAudit, useConsents, useRevokeConsent, useGrantConsent, useInvoices, useDisputeDrill, useE07Drill, type E07DrillResult } from "@/hooks/waterline";
+import { useStatus, useOperatorStatus, useDecisions, useReplayDecision, useAudit, useConsents, useRevokeConsent, useGrantConsent, useInvoices, useDisputeDrill, useE07Drill, useCanaryControls, type E07DrillResult } from "@/hooks/waterline";
 import { Money } from "@/components/waterline/money";
 import { SectionLabel, StatusDot, SkeletonCard, CopyRef } from "@/components/waterline/primitives";
 import { WlIcon } from "@/components/waterline/icons";
@@ -230,7 +230,7 @@ function StatusTab() {
 
       {/* reason input — two-person authorisation */}
       <div className="rounded-[10px] border border-caution-w/40 bg-caution-w/5 p-3.5">
-        <label className="type-label text-caution-w block mb-1.5">{T.ops.reasonLabel}</label>
+        <label className="type-label text-caution-w-dark block mb-1.5">{T.ops.reasonLabel}</label>
         <input
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -375,11 +375,18 @@ function GuardrailWatch({ reason }: { reason: string }) {
 
   const fmtValue = (m: NonNullable<StatusDto["guardrails"]>["metrics"][number]): string => {
     if (m.unit === "permyriad") return `${(m.value / 100).toFixed(1)}%`;
+    if (m.key === "portfolioCeiling") {
+      // Headroom against the ACTIVE pack ceiling — the arithmetic is named in
+      // full on the detail line (exposure vs ceiling vs pack version).
+      const aed = lang === "ar" ? formatAedAr(Math.abs(m.value)) : formatAed(Math.abs(m.value));
+      return m.value >= 0 ? T.ops.guardrails.headroom(aed) : T.ops.guardrails.overCeiling(aed);
+    }
     if (m.unit === "fils") {
       const aed = lang === "ar" ? formatAedAr(Math.abs(m.value)) : formatAed(Math.abs(m.value));
       return m.value >= 0 ? T.ops.guardrails.aboveFloor(aed) : T.ops.guardrails.belowFloor(aed);
     }
     if (m.key === "railBreaker") return m.value >= 1 ? T.ops.guardrails.railOpen : T.ops.guardrails.railClosed;
+    if (m.key === "replayIntegrity") return m.value >= 1 ? T.ops.guardrails.integrityBroken(m.value) : T.ops.guardrails.integrityClean(m.value);
     return String(m.value);
   };
   const fmtBand = (m: NonNullable<StatusDto["guardrails"]>["metrics"][number]): string =>
@@ -390,6 +397,8 @@ function GuardrailWatch({ reason }: { reason: string }) {
     : key === "lossRate" ? T.ops.guardrails.lossRate
     : key === "coverage30d" ? T.ops.guardrails.coverage30d
     : key === "railBreaker" ? T.ops.guardrails.railBreaker
+    : key === "portfolioCeiling" ? T.ops.guardrails.portfolioCeiling
+    : key === "replayIntegrity" ? T.ops.guardrails.replayIntegrity
     : T.ops.guardrails.reconBreaks;
 
   const runDrill = () => {
@@ -459,7 +468,7 @@ function GuardrailWatch({ reason }: { reason: string }) {
                   <div className="min-w-0">
                     <div className="type-caption text-caution-w-dark font-bold">
                       {T.ops.guardrails.breached} —{" "}
-                      {g.lastAutoMode === "M2" ? T.ops.guardrails.autoAppliedM2 : T.ops.guardrails.autoAppliedM1}
+                      {g.lastAutoMode === "M3" ? T.ops.guardrails.autoAppliedM3 : g.lastAutoMode === "M2" ? T.ops.guardrails.autoAppliedM2 : T.ops.guardrails.autoAppliedM1}
                     </div>
                     {g.lastAutoEpisode && g.lastAutoMode === status?.mode && (
                       <div className="type-caption text-ink-600 mt-0.5" dir="auto">{g.autoReason}</div>
@@ -525,7 +534,138 @@ function GuardrailWatch({ reason }: { reason: string }) {
       </div>
 
       <E07DrillCard reason={reason} />
+
+      <CanaryCard reason={reason} />
     </>
+  );
+}
+
+/* ── Canary phase (PRD 3.3 promotion lifecycle — the 5% traffic bucket) ── */
+function CanaryCard({ reason }: { reason: string }) {
+  const T = t(useUi((s) => s.lang));
+  const lang = useUi((s) => s.lang);
+  const { data } = useDecisions();
+  const controls = useCanaryControls();
+  const canary = data?.canary;
+  const active = canary?.active === true;
+  const diff = canary?.canaryDiff;
+  const aed = (fils: number | null) =>
+    fils === null ? "—" : lang === "ar" ? formatAedAr(fils) : formatAed(fils);
+
+  const run = (action: "promote" | "withdraw") => {
+    if (!reason || reason.trim().length < 3) {
+      toast.error(T.ops.confirmTwoPerson);
+      return;
+    }
+    controls.mutate(
+      { action, reason },
+      {
+        onSuccess: (_res) => {
+          toast.success(action === "promote" ? T.ops.canary.promotedToast : T.ops.canary.withdrawnToast, { duration: 6000 });
+        },
+        onError: (e) => toast.error(e instanceof Error ? e.message : T.errors.generic),
+      },
+    );
+  };
+
+  return (
+    <div className={cn("rounded-[10px] border bg-card p-4", active ? "border-accent-w/40" : "border-border")}>
+      <div className="flex items-baseline justify-between gap-2">
+        <div>
+          <SectionLabel>{T.ops.canary.title}</SectionLabel>
+          <div className="type-caption text-ink-400 mt-0.5">{T.ops.canary.subtitle}</div>
+        </div>
+        <WlIcon name="rule-pack" size={16} className={cn("shrink-0", active ? "text-accent-w" : "text-ink-400")} />
+      </div>
+
+      {/* Live state strip — the lifecycle state is data, never a guess. */}
+      <div
+        className={cn(
+          "mt-3 rounded-md border px-3 py-2.5 flex items-start gap-2",
+          active ? "border-accent-w/40 bg-accent-w-soft" : "border-border bg-surface-2/50",
+        )}
+      >
+        <StatusDot tone={active ? "accent" : "neutral"} pulse={active} />
+        <div className="min-w-0">
+          {active && canary ? (
+            <>
+              <div className="type-caption font-semibold text-accent-w-dark">
+                {T.ops.canary.live} — {(canary.trafficPermyriad / 100).toFixed(1)}% {T.ops.canary.traffic} · {canary.candidateVersion}
+              </div>
+              <div className="type-caption text-ink-600 mt-0.5" dir="auto">
+                {T.ops.canary.since} {new Date(canary.since ?? "").toLocaleString(lang === "ar" ? "ar-AE" : "en-AE", { dateStyle: "medium", timeStyle: "short" })} · {T.ops.canary.by} {canary.promotedBy}
+              </div>
+            </>
+          ) : (
+            <div className="type-caption text-ink-600">{T.ops.canary.idle}</div>
+          )}
+        </div>
+      </div>
+
+      {/* The canary diff — what the routed traffic received vs the base
+          counterfactual. Advisory, complete arithmetic. */}
+      {diff && diff.routed > 0 ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+              <div className="type-caption text-ink-400">{T.ops.canary.routed}</div>
+              <div className="type-body-strong">{diff.routed}</div>
+            </div>
+            <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+              <div className="type-caption text-ink-400">{T.ops.canary.gained}</div>
+              <div className={cn("type-body-strong", diff.approvalsGained > 0 && "text-success-w-dark")}>{diff.approvalsGained}</div>
+            </div>
+            <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+              <div className="type-caption text-ink-400">{T.ops.canary.lost}</div>
+              <div className={cn("type-body-strong", diff.approvalsLost > 0 && "text-danger-w")}>{diff.approvalsLost}</div>
+            </div>
+            <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+              <div className="type-caption text-ink-400">{T.ops.canary.limitMoves}</div>
+              <div className={cn("type-body-strong", diff.limitMoves > 0 && "text-accent-w-dark")}>{diff.limitMoves}</div>
+            </div>
+            <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+              <div className="type-caption text-ink-400">{T.ops.canary.priceMoves}</div>
+              <div className={cn("type-body-strong", diff.priceMoves > 0 && "text-accent-w-dark")}>{diff.priceMoves}</div>
+            </div>
+          </div>
+          {diff.examples.map((ex, i) => (
+            <div key={i} className="type-caption text-ink-600 mt-1 truncate" dir="auto">
+              {ex.label}: {ex.canaryOutcome} {aed(ex.canaryLimitFils)} → base {ex.baseOutcome} {aed(ex.baseLimitFils)}
+            </div>
+          ))}
+        </>
+      ) : (
+        <div className="type-caption text-ink-400 mt-3">{T.ops.canary.noRoutes}</div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <button
+          type="button"
+          disabled={controls.isPending || active}
+          onClick={() => run("promote")}
+          className={cn(
+            "h-10 px-4 rounded-md type-caption font-semibold press-scale border shrink-0",
+            "bg-card border-border hover:border-accent-w/60 hover:text-accent-w-dark",
+            "disabled:opacity-50 disabled:pointer-events-none"
+          )}
+        >
+          {controls.isPending && controls.variables?.action === "promote" ? T.ops.canary.promoting : T.ops.canary.promote}
+        </button>
+        <button
+          type="button"
+          disabled={controls.isPending || !active}
+          onClick={() => run("withdraw")}
+          className={cn(
+            "h-10 px-4 rounded-md type-caption font-semibold press-scale border shrink-0",
+            "bg-card border-border hover:border-caution-w/50 hover:text-caution-w",
+            "disabled:opacity-50 disabled:pointer-events-none"
+          )}
+        >
+          {controls.isPending && controls.variables?.action === "withdraw" ? T.ops.canary.withdrawing : T.ops.canary.withdraw}
+        </button>
+      </div>
+      <div className="type-caption text-ink-400 mt-2" dir="auto">{T.ops.canary.note}</div>
+    </div>
   );
 }
 
@@ -547,6 +687,11 @@ function DecisionRow({ d }: { d: DecisionDto }) {
             <span className="type-body-strong">{d.subjectLabel ?? d.subjectRef}</span>
             <span className="type-mono text-[11px] text-ink-400">{d.decisionType}</span>
             {d.shadow && <span className="type-label text-caution-w">{T.ops.shadow}</span>}
+            {d.canary && (
+              <span className="type-label text-accent-w-dark border border-accent-w/40 bg-accent-w-soft rounded-full px-2 py-0.5">
+                {T.ops.canary.liveChip}
+              </span>
+            )}
           </div>
           <div className="type-caption text-ink-400 mt-0.5 truncate">{d.reasonText}</div>
         </div>
@@ -614,18 +759,29 @@ function DecisionsTab() {
   const [filter, setFilter] = useState<string>("all");
   const decisions = (data?.decisions ?? []).filter((d) => filter === "all" || d.outcome === filter);
   const sd = data?.shadowDiff;
+  const canary = data?.canary;
   const aed = (fils: number | null) =>
     fils === null ? "—" : lang === "ar" ? formatAedAr(fils) : formatAed(fils);
 
   return (
     <div className="space-y-3">
       {/* Shadow pack (PRD 3.3 promotion lifecycle, phase 2) — the candidate
-          scores every live decision in parallel; this panel is the review. */}
+          scores every live decision in parallel; this panel is the review.
+          When the canary is live, a chip says so — the lifecycle state is
+          published data, never guessed. */}
       {sd && (
         <div className="rounded-[10px] border border-border bg-card p-4">
           <div className="flex items-baseline justify-between gap-2">
-            <div>
-              <SectionLabel>{T.ops.shadowPack.title}</SectionLabel>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <SectionLabel>{T.ops.shadowPack.title}</SectionLabel>
+                {canary?.active && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-w/40 bg-accent-w-soft px-2 py-0.5 type-caption text-accent-w-dark font-semibold">
+                    <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-accent-w animate-pulse" />
+                    {T.ops.canary.liveChip}
+                  </span>
+                )}
+              </div>
               <div className="type-caption text-ink-400 mt-0.5">{T.ops.shadowPack.subtitle}</div>
             </div>
             <span className="type-mono text-[11px] text-ink-400 shrink-0">{sd.candidateVersion}</span>

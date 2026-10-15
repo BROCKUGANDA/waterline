@@ -19,6 +19,7 @@ import { ensureSeed } from "@/lib/seed";
 import { canonicalJson, hashSnapshot, shortId } from "@/lib/canonical";
 import { evaluateAdvance, type FeatureSnapshot, type EngineDecision } from "@/lib/ruleengine";
 import { packForMode, CANDIDATE_PACK, BASE_PACK_VERSION } from "@/lib/rulepacks";
+import { canaryState, routesToCanary } from "@/lib/canary";
 import type { Offer } from "@prisma/client";
 
 const DAY = 86_400_000;
@@ -105,8 +106,15 @@ export async function GET(
     // ── 2. Pure evaluation — no I/O, no clock, no randomness ────────────────
     // The pack is selected by the DECLARED mode (M1 → the cautious delta, PRD
     // Part 8) — data decides, and the version used is recorded on the decision
-    // so replay is always exact against this same pack.
-    const pack = packForMode(status?.mode);
+    // so replay is always exact against this same pack. The CANARY phase of
+    // PRD 3.3 adds one deterministic carve-out: while M0 holds and the canary
+    // is promoted, a fixed 5% bucket of quote traffic (derived from the input
+    // hash — same hash, same bucket, forever) is served by the CANDIDATE pack.
+    // The decision row records whichever pack actually decided.
+    const canary = await canaryState();
+    const inputHash = hashSnapshot(snapshot);
+    const canaryRouted = routesToCanary(inputHash, status?.mode, canary);
+    const pack = canaryRouted ? CANDIDATE_PACK : packForMode(status?.mode);
     const result = evaluateAdvance(snapshot, pack);
 
     // ── 3. Append-only decision record BEFORE the outcome is returned ──────
@@ -117,7 +125,7 @@ export async function GET(
         subjectRef: invoice.id,
         subjectType: "invoice",
         decisionType: "advance_offer",
-        inputHash: hashSnapshot(snapshot),
+        inputHash,
         rulepackVersion: pack.version,
         featureSnapshot: canonicalJson(snapshot),
         outcome: result.outcome,
@@ -130,20 +138,26 @@ export async function GET(
         evaluatedAt: now,
         actor: "system",
         shadow: false,
+        canary: canaryRouted,
       },
     });
 
-    // ── 3b. SHADOW evaluation (PRD 3.3 promotion lifecycle, phase 2): the
-    //        candidate pack scores the SAME feature snapshot in parallel and
-    //        records what it WOULD have decided — a shadow row decides
-    //        nothing and never touches the offer. Best-effort by design: a
-    //        shadow failure never blocks the live decision (the live record
-    //        is the precondition, the shadow is telemetry). Only runs while
-    //        the BASE pack is live — under M1 the cautious delta is the
-    //        active experiment; conflating the two would be dishonest.
-    if (pack.version === BASE_PACK_VERSION) {
+    // ── 3b. PARALLEL SCORING (PRD 3.3 promotion lifecycle): whichever pack
+    //        did NOT decide this request scores the SAME feature snapshot in
+    //        parallel and records what it WOULD have decided — a shadow row
+    //        decides nothing and never touches the offer. Best-effort by
+    //        design: a shadow failure never blocks the live decision (the
+    //        live record is the precondition, the shadow is telemetry).
+    //          base pack live  → candidate shadow (the Shadow phase);
+    //          canary-routed   → BASE shadow (the canary's counterfactual),
+    //        so every quote produces a base↔candidate pair for the diff.
+    //        Only while the BASE pack is the non-canary live pack — under M1
+    //        the cautious delta is the active experiment; conflating the two
+    //        would be dishonest.
+    const shadowPack = canaryRouted ? packForMode("M0") : CANDIDATE_PACK;
+    if (canaryRouted || pack.version === BASE_PACK_VERSION) {
       try {
-        const shadowResult = evaluateAdvance(snapshot, CANDIDATE_PACK);
+        const shadowResult = evaluateAdvance(snapshot, shadowPack);
         await db.decision.create({
           data: {
             id: shortId("dec"),
@@ -152,7 +166,7 @@ export async function GET(
             subjectType: "invoice",
             decisionType: "advance_offer",
             inputHash: decision.inputHash,
-            rulepackVersion: CANDIDATE_PACK.version,
+            rulepackVersion: shadowPack.version,
             featureSnapshot: canonicalJson(snapshot),
             outcome: shadowResult.outcome,
             limitFils: shadowResult.limitFils,
@@ -164,6 +178,7 @@ export async function GET(
             evaluatedAt: now,
             actor: "system:shadow",
             shadow: true,
+            canary: false,
           },
         });
       } catch (e) {

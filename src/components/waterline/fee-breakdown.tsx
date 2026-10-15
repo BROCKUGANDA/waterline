@@ -84,7 +84,7 @@ export function DateSlider({
       <div className="flex items-baseline justify-between mb-1.5">
         <span className="type-body-strong">{T.invoices.chooseDate}</span>
         <span className="type-caption text-ink-400">
-          {T.invoices.daysEarly}: <span className="money type-body-strong text-accent-w">{daysEarly}</span>
+          {T.invoices.daysEarly}: <span className="money type-body-strong text-accent-w-dark">{daysEarly}</span>
         </span>
       </div>
       <input
@@ -108,7 +108,7 @@ export function DateSlider({
             onClick={() => onChange(d)}
             className={cn(
               "px-1 py-0.5 rounded transition-colors",
-              daysEarly === d ? "text-accent-w" : "hover:text-ink-600"
+              daysEarly === d ? "text-accent-w-dark font-semibold" : "hover:text-ink-600"
             )}
           >
             {d}

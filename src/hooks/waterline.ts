@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client";
 import type {
   OverviewDto, InvoiceDto, InvoiceDetailDto, QuoteResponse, OfferDto, PayoutDto,
-  EscrowContractDto, TreasuryDto, ForecastDto, StatusDto, ActivityEventDto, DecisionDto, AuditDto, ConsentDto,
+  EscrowContractDto, TreasuryDto, ForecastDto, StatusDto, ActivityEventDto, DecisionDto, AuditDto, ConsentDto, CanaryView,
 } from "@/lib/types";
 
 export function useOverview() {
@@ -313,7 +313,22 @@ export function useDecisions() {
           examples: { label: string; liveOutcome: string; liveLimitFils: number | null; shadowOutcome: string; shadowLimitFils: number | null }[];
           note: string;
         };
+        canary?: CanaryView;
       }>("/api/decisions"),
+  });
+}
+
+/** PRD 3.3 canary phase — operator controls (promote / withdraw). */
+export function useCanaryControls() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { action: "promote" | "withdraw"; reason: string }) =>
+      api.post<{ canary: CanaryView | null }>("/api/ops/canary", vars, { idemScope: `canary:${vars.action}:${Date.now()}` }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["decisions"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["status"] });
+    },
   });
 }
 
