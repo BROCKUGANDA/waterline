@@ -79,6 +79,17 @@ function StatusTab() {
         </div>
         <div className="type-body-strong mt-1">{T.ops.modeCopy[status.mode]?.label ?? status.modeCatalog.find((m) => m.mode === status.mode)?.label}</div>
         <div className="type-caption text-ink-400">{T.ops.modeCopy[status.mode]?.description ?? status.modeCatalog.find((m) => m.mode === status.mode)?.description}</div>
+        {/* Which pack decides right now — published, never guessed. In M1 the
+            cautious delta is active, and its version is on every decision. */}
+        {status.rulePacks && (
+          <div className="mt-2 flex items-center gap-1.5 rounded-md bg-surface-2 border border-border px-2.5 py-1.5">
+            <WlIcon name="gauge" size={13} className={status.mode === "M1" ? "text-caution-w" : "text-ink-400"} />
+            <span className="type-caption text-ink-600">{T.ops.activePack}</span>
+            <span className={cn("type-mono text-[11px] ml-auto", status.mode === "M1" ? "text-caution-w-dark" : "text-ink-400")}>
+              {status.rulePacks.activeVersion}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* mode catalog */}
@@ -120,6 +131,34 @@ function StatusTab() {
               </div>
               {status.mode === m.mode && (
                 <div className="mt-1.5 type-caption text-accent-w-dark">✓ {copy?.smeSees ?? m.smeSees}</div>
+              )}
+              {/* The cautious pack delta, spelled out field by field — the
+                  promotion-diff style of PRD 3.3, rendered where it applies. */}
+              {m.mode === "M1" && status.rulePacks && (
+                <div className="mt-2.5 rounded-md border border-caution-w/30 bg-caution-w/5 p-2.5" dir="auto">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <span className="type-label text-caution-w-dark">{T.ops.packDeltaTitle}</span>
+                    <span className="type-mono text-[10px] text-ink-400 ms-auto">{status.rulePacks.cautiousVersion}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {status.rulePacks.delta.map((d) => {
+                      const copy2 = T.ops.packDeltaCopy[d.field];
+                      const val = (v: string) => T.ops.packValueCopy[v] ?? v;
+                      const changed = d.from !== d.to;
+                      return (
+                        <div key={d.field} className="flex items-baseline justify-between gap-3">
+                          <span className="type-caption text-ink-600" title={copy2?.reason ?? d.reason}>
+                            {copy2?.field ?? d.field}
+                          </span>
+                          <span className={cn("type-mono text-[11px] whitespace-nowrap", changed ? "text-caution-w-dark" : "text-ink-400")}>
+                            {changed ? `${d.from} → ${d.to}` : val(d.from)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="type-caption text-ink-400 mt-2 pt-2 border-t border-caution-w/20">{T.ops.packUnchangedNote}</div>
+                </div>
               )}
             </div>
             );

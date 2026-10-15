@@ -16,6 +16,7 @@ import {
 import type { ForecastDto, ForecastFlowDto } from "@/lib/types";
 import { Money } from "@/components/waterline/money";
 import { SectionLabel, StatusDot, SkeletonCard } from "@/components/waterline/primitives";
+import { WlIcon } from "@/components/waterline/icons";
 import { t } from "@/lib/i18n";
 import { useUi } from "@/stores/ui";
 import { formatAed, formatAedAr } from "@/lib/money";
@@ -113,9 +114,11 @@ function EventDot(props: { cx?: number; cy?: number; inflow: boolean; outflow: b
 
 export function ForecastChart({ data, isLoading }: { data: ForecastDto | undefined; isLoading: boolean }) {
   const lang = useUi((s) => s.lang);
+  const askAdvisor = useUi((s) => s.askAdvisor);
   const T = t(lang);
   const F = T.forecast;
   const locale = lang === "ar" ? "ar-AE" : "en-AE";
+  const fmtY = (fils: number) => (lang === "ar" ? formatAedAr(fils) : formatAed(fils));
 
   const points: ChartPoint[] = useMemo(() => {
     if (!data) return [];
@@ -262,10 +265,41 @@ export function ForecastChart({ data, isLoading }: { data: ForecastDto | undefin
           )}
         >
           <StatusDot tone={data.minBalance.aboveFloor ? "success" : "danger"} />
-          <div className="type-caption">
+          <div className="type-caption flex-1 min-w-0">
             {data.minBalance.aboveFloor ? F.floorHolds : F.breachWarn} — {data.advisory}
+            {/* A projected floor gap is actionable: one tap opens the advisor
+                with the question pre-filled — the SME presses send. */}
+            {!data.minBalance.aboveFloor && (
+              <div className="mt-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    askAdvisor(
+                      lang === "ar"
+                        ? `التوقّع يبين أن رصيدي قد ينزل دون حدّي الأدنى حول ${new Date(data.minBalance.date + "T00:00:00Z").toLocaleDateString("ar-AE", { day: "numeric", month: "long" })}. ما خياراتي لسد هذه الفجوة؟`
+                        : `My forecast shows my balance dropping below my floor around ${new Date(data.minBalance.date + "T00:00:00Z").toLocaleDateString("en-AE", { day: "numeric", month: "long" })}. What are my options to close this gap?`
+                    )
+                  }
+                  className="type-caption font-semibold text-accent-w-dark underline decoration-accent-w/40 underline-offset-2 hover:decoration-accent-w press-scale"
+                >
+                  {F.askAdvisor}
+                </button>
+                <span className="sr-only">{F.askAdvisorHint}</span>
+              </div>
+            )}
           </div>
         </div>
+        {/* Live sweep yield — the money working in the background, visible */}
+        {data.sweepYield && data.sweepYield.investedFils > 0 && (
+          <div className="mt-2 flex items-center gap-2 rounded-md border border-success-w/25 bg-success-w/8 px-3 py-2">
+            <WlIcon name="gauge" size={14} className="text-success-w shrink-0" />
+            <div className="type-caption text-ink-600 min-w-0 flex-1">
+              <span className="font-semibold">{F.yieldAccruing}</span>{" "}
+              <span className="money text-success-w">{F.yieldPerDay(fmtY(data.sweepYield.perDayFils))}</span>
+              <span className="text-ink-400"> · {F.yieldToDate(fmtY(data.sweepYield.accruedTodayFils))} · {F.yieldOn(fmtY(data.sweepYield.investedFils))}</span>
+            </div>
+          </div>
+        )}
         <div className="mt-2 grid grid-cols-3 gap-2">
           <div className="flex items-center justify-between rounded-md border border-border px-2.5 py-1.5">
             <span className="type-caption text-ink-400">{F.totalIn}</span>

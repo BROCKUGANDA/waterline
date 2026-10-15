@@ -88,6 +88,16 @@ function reject(code: string, text: string, rule: string, checks: EngineDecision
   return { outcome: "rejected", reasonCode: code, reasonText: text, bindingRule: rule, limitFils: null, advanceRatePermyriad: null, priceMilliBpsPerDay: null, checks };
 }
 
+/** Fils → "AED 7,200" / "AED 7,200.50" for user-facing reason sentences.
+ *  Pure string math on integers — the same discipline as the money lib,
+ *  kept inline so the engine imports nothing. */
+function fmtAed(fils: number): string {
+  const whole = Math.floor(fils / 100);
+  const frac = fils % 100;
+  const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return frac === 0 ? `AED ${grouped}` : `AED ${grouped}.${String(frac).padStart(2, "0")}`;
+}
+
 /** Pure evaluation of the advance-offer decision. */
 export function evaluateAdvance(snap: FeatureSnapshot, pack: RulePack): EngineDecision {
   const checks: EngineDecision["checks"] = [];
@@ -164,13 +174,15 @@ export function evaluateAdvance(snap: FeatureSnapshot, pack: RulePack): EngineDe
   if (outcome === "approved" && binding !== "L01:base") {
     outcome = "capped";
     if (reasonCode === "OK_CAPPED_BY_BUYER") {
-      reasonText = `Approved at ${limit}. Capped by this buyer's limit, which grows as they settle more invoices on time.`;
+      reasonText = `Approved at ${fmtAed(limit)}. Capped by this buyer's limit, which grows as they settle more invoices on time.`;
     } else if (reasonCode === "OK_CAPPED_BY_ENTITY") {
-      reasonText = `Approved at ${limit}. Your entity limit grows with tenure and billing history.`;
+      reasonText = `Approved at ${fmtAed(limit)}. Your entity limit grows with tenure and billing history.`;
     } else if (reasonCode === "OK_CAPPED_BY_SECTOR") {
-      reasonText = `Approved at ${limit}. This sector's limit is set by the current rule pack.`;
+      reasonText = `Approved at ${fmtAed(limit)}. This sector's limit is set by the current rule pack.`;
     } else if (reasonCode === "OK_CAPPED_UNRATED") {
-      reasonText = `Approved at ${limit}. New buyer relationships start at 60% and grow as invoices are confirmed and settled on time.`;
+      // The cap % derives from the pack — the cautious delta (M1) tightens it,
+      // and the sentence must never contradict the arithmetic.
+      reasonText = `Approved at ${fmtAed(limit)}. New buyer relationships start at ${(pack.limits.unratedAdvanceCapPermyriad / 100).toFixed(0)}% and grow as invoices are confirmed and settled on time.`;
     }
   }
 

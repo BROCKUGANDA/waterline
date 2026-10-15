@@ -27,6 +27,7 @@
   --wl-paper: #FFFFFF;
   --wl-paper-warm: #FAF8F5;
   --wl-surface-2: #F4F2EE;
+  --wl-accent-money: #2783DE;
 
   /* ── Semantics ──────────────────────────────────────────────────────── */
   --wl-success: #1E8E5A;
@@ -91,8 +92,11 @@
 .dark {
   --wl-ink-900: #E8EBEF;
   --wl-ink-800: #C7CCD4;
-  --wl-ink-600: #767F8C;
-  --wl-ink-400: #9AA3AF;
+  /* Re-paired so the hierarchy SURVIVES the inversion: body (600) stays
+     BRIGHTER than muted (400) — 7.2:1 vs 5.1:1 on paper. The previous
+     pairing inverted the two, rendering body copy dimmer than captions. */
+  --wl-ink-600: #9AA3AF;
+  --wl-ink-400: #7E8894;
   --wl-ink-200: #3A4350;
   --wl-ink-100: #232D3B;
 
@@ -100,6 +104,10 @@
   --wl-accent-700: #2783DE;
   --wl-accent-900: #E8F2FB;
   --wl-accent-50: #14293E;
+  /* Hero money figures: same brand blue, softened + lifted for dark paper
+     (≈11:1) — calmer than accent-500 on 28px numerals, still unmistakably
+     WATERLINE blue. Light mode reuses accent-700 (no visual change). */
+  --wl-accent-money: #B6D7F5;
 
   --wl-paper: #0B1420;
   --wl-paper-warm: #121B29;
@@ -161,6 +169,7 @@
   --color-accent-w-deep: var(--wl-accent-700);
   --color-accent-w-dark: var(--wl-accent-900);
   --color-accent-w-soft: var(--wl-accent-50);
+  --color-accent-money: var(--wl-accent-money);
 
   --color-paper: var(--wl-paper);
   --color-paper-warm: var(--wl-paper-warm);
@@ -325,7 +334,7 @@ body {
   background-image: linear-gradient(135deg, #6b4fa8 0%, #4a3579 100%);
 }
 .dark .grad-escrow-lock {
-  background-image: linear-gradient(135deg, #7d61b8 0%, #4a3579 100%);
+  background-image: linear-gradient(135deg, #6d51a4 0%, #3f2f66 100%);
 }
 
 /* Skeleton shimmer — single pass, 1.4s, mirrored in RTL (PRD 11.3) */
@@ -426,7 +435,46 @@ input[type="range"].wl-slider {
 input[type="range"].wl-slider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 99px;
-  background: var(--wl-ink-100);
+  /* Filled track: the accent marks the chosen value, the rest stays quiet.
+     --wl-fill is set inline by the slider components (a hard two-stop
+     gradient — no transitions, the value IS the position). */
+  background: linear-gradient(
+    to right,
+    var(--wl-accent-500) 0%,
+    var(--wl-accent-500) var(--wl-fill, 0%),
+    var(--wl-ink-100) var(--wl-fill, 0%),
+    var(--wl-ink-100) 100%
+  );
+}
+.dark input[type="range"].wl-slider::-webkit-slider-runnable-track {
+  /* Visible at 4px on dark cards — the old ink-100 pairing vanished */
+  background: linear-gradient(
+    to right,
+    var(--wl-accent-500) 0%,
+    var(--wl-accent-500) var(--wl-fill, 0%),
+    #4A5462 var(--wl-fill, 0%),
+    #4A5462 100%
+  );
+}
+/* RTL sliders (no explicit dir="ltr"): the value grows right-to-left, so the
+   fill must anchor from the right edge. */
+[dir="rtl"] input[type="range"].wl-slider:not([dir="ltr"])::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to left,
+    var(--wl-accent-500) 0%,
+    var(--wl-accent-500) var(--wl-fill, 0%),
+    var(--wl-ink-100) var(--wl-fill, 0%),
+    var(--wl-ink-100) 100%
+  );
+}
+.dark [dir="rtl"] input[type="range"].wl-slider:not([dir="ltr"])::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to left,
+    var(--wl-accent-500) 0%,
+    var(--wl-accent-500) var(--wl-fill, 0%),
+    #4A5462 var(--wl-fill, 0%),
+    #4A5462 100%
+  );
 }
 input[type="range"].wl-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -446,7 +494,40 @@ input[type="range"].wl-slider:active::-webkit-slider-thumb {
 input[type="range"].wl-slider::-moz-range-track {
   height: 4px;
   border-radius: 99px;
-  background: var(--wl-ink-100);
+  background: linear-gradient(
+    to right,
+    var(--wl-accent-500) 0%,
+    var(--wl-accent-500) var(--wl-fill, 0%),
+    var(--wl-ink-100) var(--wl-fill, 0%),
+    var(--wl-ink-100) 100%
+  );
+}
+.dark input[type="range"].wl-slider::-moz-range-track {
+  background: linear-gradient(
+    to right,
+    var(--wl-accent-500) 0%,
+    var(--wl-accent-500) var(--wl-fill, 0%),
+    #4A5462 var(--wl-fill, 0%),
+    #4A5462 100%
+  );
+}
+[dir="rtl"] input[type="range"].wl-slider:not([dir="ltr"])::-moz-range-track {
+  background: linear-gradient(
+    to left,
+    var(--wl-accent-500) 0%,
+    var(--wl-accent-500) var(--wl-fill, 0%),
+    var(--wl-ink-100) var(--wl-fill, 0%),
+    var(--wl-ink-100) 100%
+  );
+}
+.dark [dir="rtl"] input[type="range"].wl-slider:not([dir="ltr"])::-moz-range-track {
+  background: linear-gradient(
+    to left,
+    var(--wl-accent-500) 0%,
+    var(--wl-accent-500) var(--wl-fill, 0%),
+    #4A5462 var(--wl-fill, 0%),
+    #4A5462 100%
+  );
 }
 input[type="range"].wl-slider::-moz-range-thumb {
   width: 14px;

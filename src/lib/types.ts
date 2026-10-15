@@ -233,6 +233,9 @@ export interface ForecastDto {
   startFils: number;
   floorFils: number;
   autoPilotEnabled: boolean;
+  /** Live sweep yield (additive): what idle money is earning in the
+   *  background right now — never invisible on the forecast. */
+  sweepYield?: { accruedTodayFils: number; perDayFils: number; investedFils: number };
   days: ForecastDayDto[];
   minBalance: { date: string; endFils: number; aboveFloor: boolean };
   summary: {
@@ -251,6 +254,14 @@ export interface StatusDto {
   breakers: Record<string, string>;
   updatedAt: string;
   modeCatalog: ModeInfo[];
+  /** Published pack state (additive): which rule-pack version decides right
+   *  now (M1 → the cautious delta) and exactly what that delta changes. */
+  rulePacks?: {
+    activeVersion: string;
+    cautiousVersion: string;
+    modeCoupled: string;
+    delta: { field: string; from: string; to: string; reason: string }[];
+  };
   /** POST only: how many queued payouts were released when the rail returned. */
   queueDrained?: number;
 }

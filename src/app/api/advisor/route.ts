@@ -18,6 +18,7 @@ import { formatAed } from "@/lib/money";
 import { accountBalance, LEDGER_ACCOUNTS } from "@/lib/ledger";
 import { evaluateSweep, type FeatureSnapshot } from "@/lib/ruleengine";
 import { rulePack, RULEPACK_VERSION } from "@/lib/rulepack";
+import { packForMode } from "@/lib/rulepacks";
 import { ensureSeed } from "@/lib/seed";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ interface AdvisorBody {
   history?: unknown;
 }
 
-function buildSystemPrompt(lang: string, contextJson: string): string {
+function buildSystemPrompt(lang: string, contextJson: string, mode: string | null): string {
   const voice =
     lang === "ar"
       ? [
@@ -64,7 +65,7 @@ function buildSystemPrompt(lang: string, contextJson: string): string {
     "TENANT FACTS (live, derived — the only numbers you may cite):",
     contextJson,
     "",
-    `RULE PACK ${RULEPACK_VERSION} anchors: advance rates up to ${rulePack.limits.baseAdvanceRatePermyriad / 100}% of invoice value (60% for unrated buyers), price curves ${Object.entries(rulePack.pricing.baseCurveMilliBps).map(([k, v]) => `${k} ${(v / 10).toFixed(1)} bps/day`).join(", ")}, floor ${rulePack.pricing.floorMilliBps / 10} bps/day, minimum invoice ${formatAed(200_000)}, minimum sweep ${formatAed(rulePack.treasury.minSweepFils)}.`,
+    `RULE PACK anchors (${packForMode(mode).version}${mode === "M1" ? " — cautious tightening active" : ""}): advance rates up to ${packForMode(mode).limits.baseAdvanceRatePermyriad / 100}% of invoice value (${packForMode(mode).limits.unratedAdvanceCapPermyriad / 100}% for unrated buyers), price curves ${Object.entries(packForMode(mode).pricing.baseCurveMilliBps).map(([k, v]) => `${k} ${(v / 10).toFixed(1)} bps/day`).join(", ")}, floor ${packForMode(mode).pricing.floorMilliBps / 10} bps/day, minimum invoice ${formatAed(200_000)}, minimum sweep ${formatAed(packForMode(mode).treasury.minSweepFils)}.`,
     "Every fee is: days early × rate per day × advance — always shown expanded in the app.",
   ].join("\n");
 }
@@ -225,7 +226,7 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const context = await buildContext();
-    const system = buildSystemPrompt(lang, context);
+    const system = buildSystemPrompt(lang, context, status?.mode ?? null);
 
     const zai = await ZAI.create();
     const completion = await zai.chat.completions.create({

@@ -23,7 +23,7 @@ const toneVar: Record<DotTone, string> = {
 export function StatusDot({ tone, pulse, className }: { tone: DotTone; pulse?: boolean; className?: string }) {
   return (
     <span
-      className={cn("inline-block h-2 w-2 rounded-full", toneVar[tone], pulse && "dot-pulse", className)}
+      className={cn("inline-block h-2.5 w-2.5 rounded-full", toneVar[tone], pulse && "dot-pulse", className)}
       aria-hidden="true"
     />
   );
@@ -82,9 +82,9 @@ export function TierChip({ tier }: { tier: string }) {
   const styles: Record<string, string> = {
     platinum: "bg-accent-w-soft text-accent-w-dark border-accent-w/30",
     gold: "bg-caution-w/10 text-caution-w border-caution-w/30",
-    silver: "bg-surface-2 text-ink-600 border-ink-200",
+    silver: "bg-surface-2 text-ink-600 border-ink-200 dark:border-ink-400",
     bronze: "bg-[#E8DCC8] text-[#7A5C2E] border-[#C9B48A] dark:bg-[#3A3225] dark:text-[#D9C9A5]",
-    unrated: "bg-surface-2 text-ink-400 border-ink-200 border-dashed",
+    unrated: "bg-surface-2 text-ink-400 border-ink-200 border-dashed dark:text-ink-600 dark:border-ink-400",
   };
   return (
     <span className={cn("type-label px-1.5 py-0.5 rounded-sm border", styles[tier] ?? styles.unrated)}>{tier}</span>

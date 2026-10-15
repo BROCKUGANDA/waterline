@@ -11,6 +11,7 @@ import { useTheme } from "next-themes";
 import { useUi, type View } from "@/stores/ui";
 import { t, type Lang } from "@/lib/i18n";
 import { WlIcon, WaterlineLogo, type WlIconName } from "./icons";
+import { useStatus } from "@/hooks/waterline";
 import { StatusBanner } from "./status-banner";
 import { AdvisorPanel } from "./advisor";
 import { OnboardingFlow } from "./onboarding";
@@ -62,6 +63,9 @@ function RailButton({
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { view, setView, lang, toggleLang, railCollapsed, toggleRail, setAdvisorOpen } = useUi();
+  // The footer names the pack that decides right now — published on
+  // /api/status, never hardcoded (M1 activates the cautious delta).
+  const { data: status } = useStatus();
   const { theme, setTheme } = useTheme();
   const T = t(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
@@ -208,8 +212,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   {T.appName} · du SME Challenge — Theme 2 · Creating Liquidity
                 </span>
               </div>
-              <span className="type-caption text-ink-400">
-                Deterministic rule pack 2026.10.3 · every decision replayable
+              <span
+                className="type-caption text-ink-400"
+                title={status?.rulePacks?.activeVersion}
+              >
+                {T.footerPack(status?.rulePacks?.activeVersion ?? "2026.10.3", status?.mode === "M1")}
               </span>
             </div>
           </footer>

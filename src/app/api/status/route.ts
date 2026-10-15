@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { DEMO_TENANT, errors, ok, readJson, requireIdempotencyKey } from "@/lib/api";
 import { releaseQueuedPayouts } from "@/lib/payout-queue";
 import { ensureSeed } from "@/lib/seed";
+import { packForMode, CAUTIOUS_DELTA_SUMMARY, CAUTIOUS_PACK_VERSION } from "@/lib/rulepacks";
 import type { StatusState } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +83,14 @@ interface StatusView {
   killSwitches: Record<string, boolean>;
   breakers: Record<string, string>;
   updatedAt: string;
+  // Which rule pack is deciding right now (M1 → the cautious delta) + what
+  // that delta changes — published, never guessed (PRD 3.3/Part 8).
+  rulePacks: {
+    activeVersion: string;
+    cautiousVersion: string;
+    modeCoupled: string;
+    delta: { field: string; from: string; to: string; reason: string }[];
+  };
   modeCatalog: {
     mode: string;
     label: string;
@@ -107,6 +116,7 @@ function viewFrom(st: StatusState): StatusView {
     breakers: { ...DEFAULT_BREAKERS, ...(safeRecord(st.breakersJson) as Record<string, string>) },
     updatedAt: st.updatedAt.toISOString(),
     modeCatalog: MODE_CATALOG.map((m) => ({ ...m })),
+    rulePacks: rulePacksView(st.mode),
   };
 }
 
@@ -118,6 +128,18 @@ function hardcodedM0(): StatusView {
     breakers: { ...DEFAULT_BREAKERS },
     updatedAt: new Date().toISOString(),
     modeCatalog: MODE_CATALOG.map((m) => ({ ...m })),
+    rulePacks: rulePacksView("M0"),
+  };
+}
+
+/** The pack block published with every status read. Pure — safe for the
+ *  hardcoded M0 fallback too. */
+function rulePacksView(mode: string): StatusView["rulePacks"] {
+  return {
+    activeVersion: packForMode(mode).version,
+    cautiousVersion: CAUTIOUS_PACK_VERSION,
+    modeCoupled: "M1",
+    delta: CAUTIOUS_DELTA_SUMMARY.map((d) => ({ ...d })),
   };
 }
 

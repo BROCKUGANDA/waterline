@@ -51,7 +51,7 @@ function BalanceHeader({ walletFils, asOf }: { walletFils: number; asOf: string 
         <SectionLabel>{T.cash.availableNow}</SectionLabel>
         <div className="flex items-baseline gap-3 mt-1">
           <span
-            className="money type-display text-accent-w-deep dark:text-accent-w"
+            className="money type-display text-accent-w-deep dark:text-accent-money"
             style={{ fontSize: displaySize, lineHeight: 1.1, transition: "font-size 100ms linear" }}
           >
             {lang === "ar" ? formatAedAr(walletFils) : formatAed(walletFils)}
@@ -163,6 +163,7 @@ function TreasuryPanel() {
             className="wl-slider w-full mt-2"
             dir="ltr"
             aria-label={T.cash.setFloor}
+            style={{ "--wl-fill": `${(Math.min(floor, Math.max(projection.walletFils * 2, 1)) / Math.max(projection.walletFils * 2, 1)) * 100}%` } as React.CSSProperties}
           />
           <div className="flex justify-between type-caption text-ink-400">
             <span>{T.cash.sweepable}:</span>

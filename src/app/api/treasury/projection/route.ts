@@ -203,6 +203,16 @@ export async function GET() {
       perDay: yieldPerDay(s),
     }));
 
+    // Live sweep yield, accrued to today (integer fils, same per-day math
+    // as the recall model): surfaced on the forecast so idle money working
+    // in the background is never invisible (additive fields).
+    const nowMs = Date.now();
+    const accruedTodayFils = recallable.reduce(
+      (a, s) => a + s.perDay * Math.max(0, Math.floor((nowMs - s.createdAt.getTime()) / DAY)),
+      0,
+    );
+    const yieldPerDayFils = recallable.reduce((a, s) => a + s.perDay, 0);
+
     const days: DayProjection[] = [];
     let balance = startFils;
     let minBalance = { date: ymd(new Date()), endFils: startFils, aboveFloor: startFils >= floorFils };
@@ -261,6 +271,7 @@ export async function GET() {
       startFils,
       floorFils,
       autoPilotEnabled: policy.autoPilotEnabled,
+      sweepYield: { accruedTodayFils, perDayFils: yieldPerDayFils, investedFils: recallable.reduce((a, s) => a + s.amountFils, 0) },
       days,
       minBalance,
       summary: {

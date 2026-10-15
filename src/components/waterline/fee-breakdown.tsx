@@ -97,6 +97,7 @@ export function DateSlider({
         className="wl-slider w-full"
         aria-label={T.invoices.chooseDate}
         dir="ltr"
+        style={{ "--wl-fill": `${((daysEarly - 1) / Math.max(1, model.maxDaysEarly - 1)) * 100}%` } as React.CSSProperties}
       />
       <div className="flex justify-between type-label text-ink-400 mt-0.5 select-none" dir="ltr">
         {ticks.map((d) => (

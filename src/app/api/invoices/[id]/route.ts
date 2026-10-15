@@ -9,7 +9,7 @@ import { ok, errors, DEMO_TENANT } from "@/lib/api";
 import { advancePayoutPipeline, releaseQueuedPayouts } from "@/lib/payout-queue";
 import { ensureSeed } from "@/lib/seed";
 import { evaluateAdvance, type FeatureSnapshot } from "@/lib/ruleengine";
-import { rulePack } from "@/lib/rulepack";
+import { packForMode } from "@/lib/rulepacks";
 import type { BuyerLink, Entity, Invoice, Offer, Payout, Decision } from "@prisma/client";
 
 const DAY = 86_400_000;
@@ -57,6 +57,10 @@ export async function GET(
       payoutOut = await advancePayoutPipeline(payoutOut);
     }
 
+    // The declared mode selects the pack the hint evaluates with (M1 → the
+    // cautious delta) — same rule as the quote endpoint, so the two agree.
+    const status = await db.statusState.findUnique({ where: { id: "singleton" } });
+
     return ok({
       invoice: serializeInvoiceCore(invoice, invoice.buyerLink),
       buyer: {
@@ -73,7 +77,7 @@ export async function GET(
       offers: offers.map(serializeOffer),
       latestDecision: latestDecision ? serializeDecisionSummary(latestDecision) : null,
       payout: payoutOut ? serializePayout(payoutOut) : null,
-      eligibilityHint: await eligibilityHint(invoice, invoice.entity, invoice.buyerLink),
+      eligibilityHint: await eligibilityHint(invoice, invoice.entity, invoice.buyerLink, status?.mode ?? null),
     });
   } catch (e) {
     console.error("[api/invoices/[id] GET]", e);
@@ -170,6 +174,7 @@ async function eligibilityHint(
   inv: Invoice,
   entity: Entity,
   buyer: BuyerLink,
+  mode: string | null,
 ): Promise<{ reasonCode: string; reasonText: string } | null> {
   if (inv.fundingState === "accepted") {
     return {
@@ -229,7 +234,9 @@ async function eligibilityHint(
     portfolio: { bookExposureFils },
     treasury: null,
   };
-  const result = evaluateAdvance(snapshot, rulePack);
+  // The hint must agree with a live quote: the same mode-selected pack the
+  // quote endpoint uses (M1 → the cautious delta).
+  const result = evaluateAdvance(snapshot, packForMode(mode));
   if (result.outcome === "rejected") {
     return { reasonCode: result.reasonCode, reasonText: result.reasonText };
   }

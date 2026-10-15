@@ -9,6 +9,7 @@ import { ensureSeed } from "@/lib/seed";
 import { accountBalance, LEDGER_ACCOUNTS } from "@/lib/ledger";
 import { evaluateSweep, entityCapFils, type FeatureSnapshot } from "@/lib/ruleengine";
 import { rulePack } from "@/lib/rulepack";
+import { packForMode } from "@/lib/rulepacks";
 
 const DAY = 86_400_000;
 
@@ -135,8 +136,9 @@ export async function GET() {
       // The activation moment (PRD 4.1-04): before any invoice is uploaded,
       // the SME sees its indicative limit derived from du billing history
       // alone — tenure and billing band through the same deterministic rule
-      // pack that prices every advance. No model, no guess.
-      indicativeLimitFils: entityCapFils(treasurySnapshot, rulePack),
+      // pack that prices every advance. No model, no guess. In M1 the cautious
+      // pack is active, so the figure reflects the tightened limits honestly.
+      indicativeLimitFils: entityCapFils(treasurySnapshot, packForMode(status?.mode)),
       balance: { walletFils, asOf: now.toISOString() },
       liquidity: {
         availableFils: walletFils + investedFils,

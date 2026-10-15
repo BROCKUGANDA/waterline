@@ -18,7 +18,7 @@ import { ok, problem, errors, DEMO_TENANT } from "@/lib/api";
 import { ensureSeed } from "@/lib/seed";
 import { canonicalJson, hashSnapshot, shortId } from "@/lib/canonical";
 import { evaluateAdvance, type FeatureSnapshot, type EngineDecision } from "@/lib/ruleengine";
-import { rulePack, RULEPACK_VERSION } from "@/lib/rulepack";
+import { packForMode } from "@/lib/rulepacks";
 import type { Offer } from "@prisma/client";
 
 const DAY = 86_400_000;
@@ -103,7 +103,11 @@ export async function GET(
     };
 
     // ── 2. Pure evaluation — no I/O, no clock, no randomness ────────────────
-    const result = evaluateAdvance(snapshot, rulePack);
+    // The pack is selected by the DECLARED mode (M1 → the cautious delta, PRD
+    // Part 8) — data decides, and the version used is recorded on the decision
+    // so replay is always exact against this same pack.
+    const pack = packForMode(status?.mode);
+    const result = evaluateAdvance(snapshot, pack);
 
     // ── 3. Append-only decision record BEFORE the outcome is returned ──────
     const decision = await db.decision.create({
@@ -114,7 +118,7 @@ export async function GET(
         subjectType: "invoice",
         decisionType: "advance_offer",
         inputHash: hashSnapshot(snapshot),
-        rulepackVersion: RULEPACK_VERSION,
+        rulepackVersion: pack.version,
         featureSnapshot: canonicalJson(snapshot),
         outcome: result.outcome,
         limitFils: result.limitFils,

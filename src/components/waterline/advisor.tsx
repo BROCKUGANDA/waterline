@@ -79,6 +79,20 @@ export function AdvisorPanel() {
     if (open) textareaRef.current?.focus();
   }, [open]);
 
+  // Deep-linked question (e.g. from a forecast floor-gap warning): pre-fill
+  // the composer once, never auto-send — the SME sees and owns the question.
+  const seed = useUi((s) => s.advisorSeed);
+  const setSeed = useUi((s) => s.setAdvisorSeed);
+  useEffect(() => {
+    if (open && seed) {
+      const id = setTimeout(() => {
+        setQuestion(seed);
+        setSeed(null);
+      }, 0);
+      return () => clearTimeout(id);
+    }
+  }, [open, seed, setSeed]);
+
   // The advisor does not exist in read-only mode — honest absence.
   if (m4 && !open) return null;
 

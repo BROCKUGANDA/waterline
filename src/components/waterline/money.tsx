@@ -51,7 +51,7 @@ export function Money({
 
   const text = lang === "ar" ? formatAedAr(fils, { whole }) : formatAed(fils, { whole });
   const color =
-    colorize === "accent" ? "text-accent-w" : colorize === "success" ? "text-success-w" : colorize === "danger" ? "text-danger-w" : colorize === "treasury" ? "text-treasury-w" : "";
+    colorize === "accent" ? "text-accent-money" : colorize === "success" ? "text-success-w" : colorize === "danger" ? "text-danger-w" : colorize === "treasury" ? "text-treasury-w" : "";
 
   return (
     <span className={cn("money", sizeClass[size], color, rolled && "digit-roll", className)}>

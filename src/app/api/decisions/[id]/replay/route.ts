@@ -22,7 +22,8 @@ import {
   type EngineDecision,
   type SweepDecision,
 } from "@/lib/ruleengine";
-import { rulePack, RULEPACK_VERSION } from "@/lib/rulepack";
+import { RULEPACK_VERSION } from "@/lib/rulepack";
+import { packForMode, packForVersion } from "@/lib/rulepacks";
 
 export const dynamic = "force-dynamic";
 
@@ -71,15 +72,27 @@ export async function POST(
       );
     }
 
-    // Re-evaluate the SAME snapshot. Only one pack version exists in this
-    // build; if the recorded version ever differs from the active one we still
-    // evaluate and surface the drift explicitly (never silently).
+    // Re-evaluate the SAME snapshot against the pack version RECORDED on the
+    // decision (PRD 3.2: "Replaying the same hash against the same pack
+    // version must produce a byte-identical outcome"). With the versioned
+    // registry this is now literal: a cautious-pack decision replays against
+    // the cautious pack, a base-pack decision against the base pack. An
+    // unknown recorded version is surfaced honestly, never silently swapped.
+    const recordedPack = packForVersion(d.rulepackVersion);
+    if (recordedPack === null) {
+      return errors.invalidRequest(
+        `The rule-pack version recorded on this decision (${d.rulepackVersion}) is not present in this build's registry — replay cannot honestly proceed. Active versions: base ${RULEPACK_VERSION}, cautious per /api/status.`,
+      );
+    }
+    const activePack = packForMode(status?.mode);
     let original: OutcomeFields;
     let replay: OutcomeFields;
     let matchesOriginal: boolean;
 
     if (d.decisionType === "treasury_sweep") {
-      const r: SweepDecision = evaluateSweep(snap, rulePack);
+      // Treasury decisions are always recorded against the base pack (the M1
+      // cautious delta does not touch treasury parameters).
+      const r: SweepDecision = evaluateSweep(snap, recordedPack);
       original = {
         outcome: d.outcome,
         limitFils: d.limitFils,
@@ -105,7 +118,7 @@ export async function POST(
         original.reasonCode === replay.reasonCode &&
         original.bindingRule === replay.bindingRule;
     } else {
-      const r: EngineDecision = evaluateAdvance(snap, rulePack);
+      const r: EngineDecision = evaluateAdvance(snap, recordedPack);
       original = {
         outcome: d.outcome,
         limitFils: d.limitFils,
@@ -154,8 +167,8 @@ export async function POST(
       original,
       replay,
       rulepackVersion: d.rulepackVersion,
-      activeRulepackVersion: RULEPACK_VERSION,
-      versionDrift: d.rulepackVersion !== RULEPACK_VERSION,
+      activeRulepackVersion: activePack.version,
+      versionDrift: d.rulepackVersion !== activePack.version,
       evaluatedAt: d.evaluatedAt.toISOString(),
     });
   } catch (e) {
