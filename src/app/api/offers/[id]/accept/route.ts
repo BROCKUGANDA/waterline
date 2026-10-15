@@ -1,4 +1,4 @@
-// WATERLINE — POST /api/offers/[id]/accept  (Task 2-b1; PRD 4.3-03/04, 6.2).
+// WATERLINE — POST /api/offers/[id]/accept  (Task 2-b1; PRD 4.3-03/04, 6.2, Part 8).
 // Accept an early-payment offer. The server re-validates everything the SME
 // saw on screen: offer state, expiry, rule-pack version and the price
 // recomputed from the SAME hashed feature snapshot — a changed price is
@@ -6,6 +6,11 @@
 // creation and the balanced funding txn are all idempotent: the payout's
 // provider key is derived deterministically from the offer id, so a retry
 // after an ambiguous timeout cannot produce a second payment.
+//
+// M2 QUOTE-ONLY (PRD Part 8): when the payout rail is down (mode M2 or the
+// dupay breaker open), the acceptance is HONOURED at the quoted price but
+// does not fund — the payout is created "queued", no money moves, and the
+// queue drains the moment the rail returns (see src/lib/payout-queue.ts).
 
 import { db } from "@/lib/db";
 import {
@@ -17,28 +22,17 @@ import {
   requireIdempotencyKey,
   type ApiErr,
 } from "@/lib/api";
-import { LEDGER_ACCOUNTS, postTransaction } from "@/lib/ledger";
+import { postFundingTxn, railDown } from "@/lib/payout-queue";
 import { payoutIdempotencyKey, shortId } from "@/lib/canonical";
 import { evaluateAdvance, feeFor, type FeatureSnapshot } from "@/lib/ruleengine";
 import { RULEPACK_VERSION, rulePack } from "@/lib/rulepack";
 import { ensureSeed } from "@/lib/seed";
 import type { NextResponse } from "next/server";
-import type { Offer, Payout } from "@prisma/client";
+import type { Offer, Payout, StatusState } from "@prisma/client";
 
 const DAY = 86_400_000;
 
 export const dynamic = "force-dynamic";
-
-/** Ledger rows store `sourceEventId:accountCode`, so a repeated base event is
- * detected by prefix — check-before-post keeps replays read-only. The DB's
- * (tenant, source_event_id) uniqueness remains the real guard. */
-async function fundingTxnPosted(tenantId: string, offerId: string): Promise<boolean> {
-  const existing = await db.ledgerEntry.findFirst({
-    where: { tenantId, sourceEventId: { startsWith: `offer.accept:${offerId}:` } },
-    select: { id: true },
-  });
-  return existing !== null;
-}
 
 interface AcceptBody {
   daysEarly?: unknown;
@@ -47,9 +41,9 @@ interface AcceptBody {
 /** Status guard for the funding engine (contract rule 4): M4 read-only →
  * 503 degraded; M3 funding suspended or global/dynamicDiscounting kill
  * switch → 423 kill_switch_active. Escrow releases and recalls continue in
- * M3 by design — only NEW funding is blocked. */
-async function fundingGuard(): Promise<NextResponse<ApiErr> | null> {
-  const st = await db.statusState.findUnique({ where: { id: "singleton" } });
+ * M3 by design — only NEW funding is blocked. M2 does NOT block here: the
+ * acceptance is honoured and queued (PRD Part 8). */
+async function fundingGuard(st: StatusState | null): Promise<NextResponse<ApiErr> | null> {
   if (!st) return null;
   if (st.mode === "M4") return errors.degraded("M4");
   const switches = safeSwitches(st.killSwitchesJson);
@@ -141,6 +135,11 @@ export async function POST(
     // succeeded. Return the original outcome, never a second payment.
     const existingPayout = await db.payout.findUnique({ where: { offerId: offer.id } });
     if (existingPayout) {
+      if (existingPayout.state === "queued") {
+        // Queued in M2 — the funding txn is deliberately absent. No money
+        // moves while the rail is down; the queue drains on release.
+        return ok({ offer: serializeOffer(offer), payout: serializePayout(existingPayout), replayed: true, queued: true });
+      }
       // Self-heal: ensure the funding txn is present (no-op when posted) —
       // a crash between payout creation and ledger posting recovers here.
       const days = offer.daysEarly ?? 0;
@@ -151,8 +150,12 @@ export async function POST(
     }
 
     // ── Status guard (after the replay check — a replay is a read) ──
-    const guard = await fundingGuard();
+    const st = await db.statusState.findUnique({ where: { id: "singleton" } });
+    const guard = await fundingGuard(st);
     if (guard) return guard;
+    // PRD Part 8 — M2/quote-only (or dupay breaker open): honour the price,
+    // queue the acceptance, move no money.
+    const queueing = railDown(st);
 
     const body = await readJson<AcceptBody>(req);
     const daysEarly = body?.daysEarly;
@@ -229,7 +232,9 @@ export async function POST(
     // ── Atomic state change: offer → accepted, invoice → accepted, payout
     // created with the deterministic provider idempotency key. The unique
     // constraints on (offerId) and (idempotencyKey) make a duplicate payout
-    // structurally impossible even under a race (PRD 6.2).
+    // structurally impossible even under a race (PRD 6.2). In M2 the payout
+    // is created "queued" — accepted at the quoted price, funding deferred
+    // until the rail returns (PRD Part 8).
     const payoutId = shortId("pay");
     let payout: Payout;
     try {
@@ -259,7 +264,7 @@ export async function POST(
             rail: "dupay",
             destinationRef: destination,
             amountFils: net,
-            state: "accepted",
+            state: queueing ? "queued" : "accepted",
             acceptedAt: now,
             etaSeconds: 16,
           },
@@ -271,14 +276,44 @@ export async function POST(
         const winner = await db.payout.findUnique({ where: { offerId: offer.id } });
         if (winner) {
           const fresh = await db.offer.findUniqueOrThrow({ where: { id: offer.id } });
-          const wDays = fresh.daysEarly ?? daysEarly;
-          const wFee = fresh.feeFils ?? fee;
-          const wNet = fresh.netProceedsFils ?? net;
-          await postFundingTxn(fresh, invoice.externalRef, invoice.entity.duPaySuffix, wDays, wFee, wNet, winner.id);
-          return ok({ offer: serializeOffer(fresh), payout: serializePayout(winner), replayed: true });
+          if (winner.state !== "queued") {
+            // The race winner funded — self-heal the funding txn with the
+            // winner's stored figures. A queued winner needs no posting.
+            const wDays = fresh.daysEarly ?? daysEarly;
+            const wFee = fresh.feeFils ?? fee;
+            const wNet = fresh.netProceedsFils ?? net;
+            await postFundingTxn(fresh, invoice.externalRef, invoice.entity.duPaySuffix, wDays, wFee, wNet, winner.id);
+          }
+          return ok({ offer: serializeOffer(fresh), payout: serializePayout(winner), replayed: true, queued: winner.state === "queued" });
         }
       }
       throw e;
+    }
+
+    if (queueing) {
+      // ── M2: no money moves. The acceptance is recorded at the quoted
+      // price and the payout waits for the rail — the append-only trail
+      // carries exactly what happened.
+      await db.appEvent.create({
+        data: {
+          tenantId: DEMO_TENANT,
+          type: "payout.queued",
+          subjectRef: payout.id,
+          payloadJson: JSON.stringify({
+            amountFils: net,
+            offerId: offer.id,
+            rail: "dupay",
+            reason: "Payout rail unavailable — acceptance honoured at the quoted price, money moves when the rail returns.",
+          }),
+        },
+      });
+      const freshOffer = await db.offer.findUniqueOrThrow({ where: { id: offer.id } });
+      return ok({
+        offer: serializeOffer(freshOffer),
+        payout: serializePayout(payout),
+        replayed: false,
+        queued: true,
+      });
     }
 
     // ── Funding txn: control the claim, pay the net, earn the fee, hold the
@@ -294,57 +329,5 @@ export async function POST(
   } catch (e) {
     console.error("[api/offers/[id]/accept]", e);
     return errors.internal();
-  }
-}
-
-async function postFundingTxn(
-  offer: Offer,
-  invoiceRef: string,
-  duPaySuffix: string | null,
-  daysEarly: number,
-  fee: number,
-  net: number,
-  payoutId?: string,
-): Promise<void> {
-  // Idempotency: a repeated source event is a no-op (PRD 6.2). Ledger rows
-  // store the account-suffixed event id, so presence is checked by prefix;
-  // a P2002 from the DB unique constraint is treated as already-posted.
-  if (await fundingTxnPosted(offer.tenantId, offer.id)) return;
-  const reserve = offer.grossFils - net - fee;
-  try {
-    await postTransaction({
-      tenantId: offer.tenantId,
-      txnId: `txn_${shortId("f")}`,
-      sourceEventId: `offer.accept:${offer.id}`,
-      valueDate: new Date(),
-      entries: [
-        { accountCode: LEDGER_ACCOUNTS.RECEIVABLE_CONTROL, direction: "debit", amountFils: offer.grossFils, memo: `Assignment recorded — ${invoiceRef}` },
-        { accountCode: LEDGER_ACCOUNTS.FUNDING_POOL, direction: "credit", amountFils: net, memo: `Advance to du Pay ${duPaySuffix ?? ""}`.trim() },
-        { accountCode: LEDGER_ACCOUNTS.FEE_INCOME, direction: "credit", amountFils: fee, memo: `Discount fee — ${daysEarly} days early` },
-        { accountCode: LEDGER_ACCOUNTS.RESERVE_HELD, direction: "credit", amountFils: reserve, memo: "Reserve held for SME" },
-      ],
-      eventType: "offer.accepted",
-      eventSubjectRef: offer.id,
-      eventPayload: { principalFils: offer.principalFils, feeFils: fee, netProceedsFils: net, daysEarly, payoutId: payoutId ?? null },
-    });
-  } catch (e) {
-    if ((e as { code?: string }).code !== "P2002") throw e; // duplicate post → already posted
-  }
-  if (payoutId) {
-    // The outbox row for payout initiation — bound to the same logical event.
-    const existing = await db.appEvent.findFirst({
-      where: { tenantId: offer.tenantId, type: "payout.initiated", subjectRef: payoutId },
-      select: { id: true },
-    });
-    if (!existing) {
-      await db.appEvent.create({
-        data: {
-          tenantId: offer.tenantId,
-          type: "payout.initiated",
-          subjectRef: payoutId,
-          payloadJson: JSON.stringify({ amountFils: net, rail: "dupay", offerId: offer.id }),
-        },
-      });
-    }
   }
 }

@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { ok, errors, DEMO_TENANT } from "@/lib/api";
 import { ensureSeed } from "@/lib/seed";
 import { accountBalance, LEDGER_ACCOUNTS } from "@/lib/ledger";
-import { evaluateSweep, type FeatureSnapshot } from "@/lib/ruleengine";
+import { evaluateSweep, entityCapFils, type FeatureSnapshot } from "@/lib/ruleengine";
 import { rulePack } from "@/lib/rulepack";
 
 const DAY = 86_400_000;
@@ -132,6 +132,11 @@ export async function GET() {
           (entity.licenceExpiry.getTime() - now.getTime()) / DAY,
         ),
       },
+      // The activation moment (PRD 4.1-04): before any invoice is uploaded,
+      // the SME sees its indicative limit derived from du billing history
+      // alone — tenure and billing band through the same deterministic rule
+      // pack that prices every advance. No model, no guess.
+      indicativeLimitFils: entityCapFils(treasurySnapshot, rulePack),
       balance: { walletFils, asOf: now.toISOString() },
       liquidity: {
         availableFils: walletFils + investedFils,

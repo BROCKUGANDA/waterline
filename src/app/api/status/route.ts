@@ -10,6 +10,7 @@
 
 import { db } from "@/lib/db";
 import { DEMO_TENANT, errors, ok, readJson, requireIdempotencyKey } from "@/lib/api";
+import { releaseQueuedPayouts } from "@/lib/payout-queue";
 import { ensureSeed } from "@/lib/seed";
 import type { StatusState } from "@prisma/client";
 
@@ -291,7 +292,22 @@ export async function POST(req: Request): Promise<Response> {
       return next;
     });
 
-    return ok(viewFrom(updated));
+    // ── Payout-queue drain (PRD Part 8): restoring the rail (mode back to
+    // M0/M1, or the dupay breaker closed) releases queued acceptances at
+    // their quoted prices. Idempotent, no-op when the queue is empty or the
+    // rail is still down. The SME's payout polling self-releases too — this
+    // eager drain simply makes the operator's action take effect instantly.
+    let queueDrained = 0;
+    try {
+      const drained = await releaseQueuedPayouts();
+      queueDrained = drained.released;
+    } catch (e) {
+      // A queue-drain failure never fails the operator action; polling
+      // self-heals on the next payout GET.
+      console.error("[api/status] queue drain", e);
+    }
+
+    return ok({ ...viewFrom(updated), queueDrained });
   } catch {
     return errors.internal();
   }

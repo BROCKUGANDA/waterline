@@ -13,6 +13,7 @@ import { t, type Lang } from "@/lib/i18n";
 import { WlIcon, WaterlineLogo, type WlIconName } from "./icons";
 import { StatusBanner } from "./status-banner";
 import { AdvisorPanel } from "./advisor";
+import { OnboardingFlow } from "./onboarding";
 import { cn } from "@/lib/utils";
 
 const NAV: { view: View; icon: WlIconName; label: (l: Lang) => string }[] = [
@@ -198,6 +199,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* AI advisor — explains, never decides; absent in M4 */}
       <AdvisorPanel />
+
+      {/* First-run onboarding & consent tour (PRD 4.1) — once per browser */}
+      <OnboardingFlow />
 
       {/* Mobile bottom bar — four tabs, labels always visible */}
       <nav

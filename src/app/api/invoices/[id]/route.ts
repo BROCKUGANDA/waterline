@@ -6,6 +6,7 @@
 
 import { db } from "@/lib/db";
 import { ok, errors, DEMO_TENANT } from "@/lib/api";
+import { advancePayoutPipeline, releaseQueuedPayouts } from "@/lib/payout-queue";
 import { ensureSeed } from "@/lib/seed";
 import { evaluateAdvance, type FeatureSnapshot } from "@/lib/ruleengine";
 import { rulePack } from "@/lib/rulepack";
@@ -42,6 +43,20 @@ export async function GET(
       orderBy: { acceptedAt: "desc" },
     });
 
+    // Lazy queue release (PRD Part 8): viewing an invoice whose payout sits in
+    // the M2 queue drains the queue the moment the rail is back — the detail
+    // panel self-heals without waiting for the payout poller. The pipeline
+    // also advances here (same shared logic as the payout route) so every
+    // read shows the same honest stage.
+    let payoutOut = payout;
+    if (payout?.state === "queued") {
+      await releaseQueuedPayouts();
+      payoutOut = await db.payout.findUniqueOrThrow({ where: { id: payout.id } });
+    }
+    if (payoutOut && payoutOut.state !== "queued" && payoutOut.state !== "failed" && payoutOut.state !== "settled") {
+      payoutOut = await advancePayoutPipeline(payoutOut);
+    }
+
     return ok({
       invoice: serializeInvoiceCore(invoice, invoice.buyerLink),
       buyer: {
@@ -57,7 +72,7 @@ export async function GET(
       },
       offers: offers.map(serializeOffer),
       latestDecision: latestDecision ? serializeDecisionSummary(latestDecision) : null,
-      payout: payout ? serializePayout(payout) : null,
+      payout: payoutOut ? serializePayout(payoutOut) : null,
       eligibilityHint: await eligibilityHint(invoice, invoice.entity, invoice.buyerLink),
     });
   } catch (e) {

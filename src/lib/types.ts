@@ -35,6 +35,8 @@ export interface InvoiceDto {
   verifiedAt: string | null;
   fundingState: FundingState;
   invoiceHash?: string;
+  /** Payout pipeline state when funded — "queued" = accepted while the rail was down, money has NOT moved. */
+  payoutState?: string | null;
   latestOffer?: { id: string; state: string; principalFils: number; rateMilliBps: number; expiresAt: string; netProceedsFils?: number | null } | null;
   latestDecision?: { outcome: string; reasonCode: string; reasonText: string; reasonCodeText?: string } | null;
 }
@@ -242,6 +244,9 @@ export interface OverviewDto {
     tenureMonths: number;
     duPaySuffix: string;
   };
+  /** Activation moment (PRD 4.1-04): limit derived from du billing history
+   *  alone via the rule pack — shown before any invoice is uploaded. */
+  indicativeLimitFils?: number;
   balance: { walletFils: number; asOf: string };
   liquidity: {
     availableFils: number;

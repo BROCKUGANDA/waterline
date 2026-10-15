@@ -26,6 +26,8 @@ const typeIcon: Record<string, WlIconName> = {
   "decision.replayed": "audit-record",
   "offer.accepted": "wallet",
   "payout.initiated": "arrow-out",
+  "payout.queued": "clock",
+  "payout.released": "arrow-out",
   "payout.state_changed": "clock",
   "payout.settled": "check",
   "escrow.awarded": "escrow-lock",
@@ -58,6 +60,8 @@ const typeTone: Record<string, string> = {
   "sweep.recalled": "text-treasury-w bg-treasury-w/10",
   "offer.accepted": "text-accent-w bg-accent-w-soft",
   "payout.initiated": "text-accent-w bg-accent-w-soft",
+  "payout.queued": "text-caution-w bg-caution-w/10",
+  "payout.released": "text-accent-w bg-accent-w-soft",
   "advisor.qa": "text-accent-w bg-accent-w-soft",
 };
 

@@ -56,6 +56,9 @@ interface InvoiceListItem {
     feeFils: number | null;
     netProceedsFils: number | null;
   } | null;
+  /** Payout pipeline state when this invoice was funded — "queued" means
+   *  accepted while the rail was down (PRD Part 8): money has NOT moved. */
+  payoutState: string | null;
   latestDecision: {
     id: string;
     outcome: string;
@@ -71,6 +74,7 @@ function serializeInvoice(
   buyer: BuyerLink,
   latestOffer: Offer | null,
   latestDecision: Decision | null,
+  payoutState: string | null = null,
 ): InvoiceListItem {
   return {
     id: inv.id,
@@ -86,6 +90,7 @@ function serializeInvoice(
     verifiedAt: inv.verifiedAt ? inv.verifiedAt.toISOString() : null,
     fundingState: inv.fundingState,
     dueInDays: Math.ceil((inv.dueDate.getTime() - Date.now()) / DAY),
+    payoutState,
     buyer: {
       id: buyer.id,
       buyerName: buyer.buyerName,
@@ -179,6 +184,21 @@ export async function GET(req: Request) {
       if (!latestDecisionByInvoice.has(d.subjectRef)) latestDecisionByInvoice.set(d.subjectRef, d);
     }
 
+    // Payout state per invoice (one batched query — the list never queries
+    // per row). Only funded invoices have payouts.
+    const acceptedOfferIds = offers.filter((o) => o.state === "accepted").map((o) => o.id);
+    const payoutRows = acceptedOfferIds.length
+      ? await db.payout.findMany({
+          where: { offerId: { in: acceptedOfferIds } },
+          select: { offerId: true, state: true },
+        })
+      : [];
+    const payoutStateByOffer = new Map(payoutRows.map((p) => [p.offerId, p.state]));
+    const payoutStateOf = (invoiceId: string): string | null => {
+      const o = latestOfferByInvoice.get(invoiceId);
+      return o ? (payoutStateByOffer.get(o.id) ?? null) : null;
+    };
+
     const filtered = rows.filter((inv) => {
       switch (filter) {
         case "ready":
@@ -203,6 +223,7 @@ export async function GET(req: Request) {
           inv.buyerLink,
           latestOfferByInvoice.get(inv.id) ?? null,
           latestDecisionByInvoice.get(inv.id) ?? null,
+          payoutStateOf(inv.id),
         ),
       }))
       .sort((a, b) => {

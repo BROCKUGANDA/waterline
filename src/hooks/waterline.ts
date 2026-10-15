@@ -34,6 +34,14 @@ export function useInvoiceDetail(id: string | null) {
     queryKey: ["invoice", id],
     queryFn: () => api.get<InvoiceDetailDto>(`/api/invoices/${id}`),
     enabled: !!id,
+    // While this invoice's payout is queued or mid-pipeline, keep watching —
+    // the route drains the M2 queue the moment the rail is back and the
+    // stages advance server-side on each read (PRD Part 8, 11.13).
+    refetchInterval: (query) => {
+      const data = query.state.data as InvoiceDetailDto | undefined;
+      const st = data?.payout?.state;
+      return st && st !== "settled" && st !== "failed" ? 2000 : false;
+    },
   });
 }
 
@@ -53,7 +61,7 @@ export function useAcceptOffer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { offerId: string; daysEarly: number }) =>
-      api.post<{ offer: OfferDto; payout: PayoutDto; replayed?: boolean }>(
+      api.post<{ offer: OfferDto; payout: PayoutDto; replayed?: boolean; queued?: boolean }>(
         `/api/offers/${vars.offerId}/accept`,
         { daysEarly: vars.daysEarly },
         { idemScope: `accept:${vars.offerId}` }

@@ -11,7 +11,7 @@
 // a no-op on the ledger.
 
 import { db } from "@/lib/db";
-import { ok, errors, requireIdempotencyKey, DEMO_TENANT } from "@/lib/api";
+import { ok, errors, problem, requireIdempotencyKey, DEMO_TENANT } from "@/lib/api";
 import { ensureSeed } from "@/lib/seed";
 import { postTransaction, LEDGER_ACCOUNTS } from "@/lib/ledger";
 import { shortId } from "@/lib/canonical";
@@ -81,6 +81,18 @@ export async function POST(
     if (offer === null) {
       return errors.invalidRequest(
         "No accepted offer found for this invoice — cannot settle an unfunded invoice.",
+      );
+    }
+
+    // A queued payout (rail down, PRD Part 8) has posted NO funding txn —
+    // the reserve was never held, so releasing it here would unbalance the
+    // ledger. Settlement waits until the payout completes.
+    const payout = await db.payout.findUnique({ where: { offerId: offer.id } });
+    if (payout?.state === "queued") {
+      return problem(
+        409,
+        "payout_queued",
+        "The payout is still queued — the payout rail is unavailable. The buyer's settlement is recorded after the payout completes; nothing is lost and the price stays locked.",
       );
     }
 

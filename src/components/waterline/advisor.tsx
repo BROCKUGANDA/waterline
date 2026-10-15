@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useAdvisor, type AdvisorTurn } from "@/hooks/waterline";
-import { useStatus } from "@/hooks/waterline";
+import { useStatus, useOverview, useTreasury } from "@/hooks/waterline";
 import { useUi } from "@/stores/ui";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,20 @@ export function AdvisorPanel() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const m4 = status?.mode === "M4";
+
+  // Live suggestions from the same cached queries the views use — the chips
+  // meet the SME where they actually are (pending invoices, idle surplus,
+  // earned yield, thin buyer history) instead of a static list.
+  const { data: overview } = useOverview();
+  const { data: treasury } = useTreasury();
+  const suggestions = (() => {
+    const live: string[] = [];
+    if ((overview?.invoices.pendingCount ?? 0) > 0) live.push(T.advisor.suggestionsLive.pending);
+    if ((treasury?.projection.sweepableFils ?? 0) > 0) live.push(T.advisor.suggestionsLive.sweepable);
+    if ((treasury?.investedFils ?? 0) > 0) live.push(T.advisor.suggestionsLive.yield);
+    if ((overview?.buyers ?? []).some((b) => b.tier === "unrated")) live.push(T.advisor.suggestionsLive.unrated);
+    return live.length > 0 ? live.slice(0, 4) : (T.advisor.suggestions as readonly string[]);
+  })();
 
   // Keep the thread pinned to the latest message.
   useEffect(() => {
@@ -137,7 +151,7 @@ export function AdvisorPanel() {
           <div ref={scrollRef} className="flex-1 overflow-y-auto wl-scroll p-4 space-y-3">
             {thread.length === 0 && (
               <div className="space-y-2.5">
-                {(T.advisor.suggestions as readonly string[]).map((s) => (
+                {suggestions.map((s) => (
                   <button
                     key={s}
                     type="button"

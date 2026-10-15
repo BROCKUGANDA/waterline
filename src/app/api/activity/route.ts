@@ -113,6 +113,14 @@ function renderEvent(ev: AppEvent, ctx: Enrichment): RenderedEvent {
       title = "Payout started";
       detail = `${aed("amountFils") ?? "the advance"} sent to du Pay on the ${str("rail") ?? "dupay"} rail — 4-stage pipeline, honest timing.`;
       break;
+    case "payout.queued":
+      title = "Payout queued";
+      detail = `${aed("amountFils") ?? "the advance"} accepted at the quoted price — the payout rail is unavailable, so money moves the moment the rail is back. Nothing to redo.`;
+      break;
+    case "payout.released":
+      title = "Queued payout released";
+      detail = `The payout rail is back — ${aed("amountFils") ?? "the advance"} is moving now at the price you accepted.`;
+      break;
     case "payout.state_changed": {
       const to = str("to") ?? str("stage") ?? "";
       if (to === "reserved") {

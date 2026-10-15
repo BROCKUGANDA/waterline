@@ -45,7 +45,7 @@ export function StageTracker({ payout, amountFils }: { payout: PayoutDto; amount
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    if (payout.state === "settled") return;
+    if (payout.state === "settled" || payout.state === "queued") return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [payout.state]);
@@ -62,6 +62,53 @@ export function StageTracker({ payout, amountFils }: { payout: PayoutDto; amount
 
   const elapsed = now - new Date(payout.acceptedAt).getTime();
   const etaLeft = Math.max(0, payout.etaSeconds * 1000 - elapsed);
+
+  // ── Queued (PRD Part 8 — M2): the rail is down. Honest indeterminate
+  // state: amount + locked price + why it waits. No fabricated stages, no
+  // timer. The poller (usePayout) keeps watching; the moment the rail is
+  // back the server releases the queue and this flips to the live pipeline.
+  if (payout.state === "queued") {
+    return (
+      <div>
+        <div className="flex items-baseline justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <WlIcon name="clock" size={18} className="text-caution-w" />
+            <span className="type-title">{T.invoices.queuedTitle}</span>
+          </div>
+          <span className="type-caption text-ink-600 flex items-center gap-1.5">
+            <StatusDot tone="caution" pulse />
+            {T.invoices.queuedWatch}
+          </span>
+        </div>
+
+        <div className="flex items-center mb-3">
+          <Money fils={amountFils} size="amount" colorize="accent" whole={false} />
+          <span className="type-caption text-ink-400 ms-2">→ {payout.destinationRef}</span>
+        </div>
+
+        <div className="rounded-[10px] border border-caution-w/30 bg-caution-w/5 p-3.5">
+          <div className="type-body text-ink-600">{T.invoices.queuedBody}</div>
+        </div>
+
+        <ol className="relative ms-3 mt-4 opacity-55" aria-hidden="true">
+          <div className="absolute inset-y-2 start-[5px] w-px bg-ink-200 dark:bg-ink-600" />
+          {stages.map((s) => (
+            <li key={s.key} className="relative flex items-center gap-3 pb-3.5 last:pb-0">
+              <span className="relative z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-card">
+                <span className="h-2.5 w-2.5 rounded-full border-2 border-ink-200 dark:border-ink-600" />
+              </span>
+              <span className="type-body-strong text-ink-400">{labels[s.key] ?? s.label}</span>
+            </li>
+          ))}
+        </ol>
+
+        <div className="mt-2 rounded-[10px] bg-accent-w-soft/70 border border-accent-w/25 p-3 flex gap-2.5">
+          <WlIcon name="consent" size={16} className="text-accent-w-deep mt-0.5" />
+          <div className="type-caption text-accent-w-dark">{T.invoices.queuedHint}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

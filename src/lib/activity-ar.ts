@@ -89,6 +89,16 @@ export function renderActivityEventAr(ev: ActivityEventDto): EventCopy {
         title: "بدأت الدفعة",
         detail: `${aed("amountFils") ?? "الدفعة"} أُرسلت إلى دو باي عبر قناة ${str("rail") ?? "dupay"} — أربع مراحل، توقيت صادق.`,
       };
+    case "payout.queued":
+      return {
+        title: "دفعة في الانتظار",
+        detail: `${aed("amountFils") ?? "الدفعة"} قُبلت بالسعر المقتبس — قناة الدفع غير متاحة، لذا يتحرك المال فور عودتها. لا شيء لإعادة فعله.`,
+      };
+    case "payout.released":
+      return {
+        title: "أُطلقت الدفعة المنتظرة",
+        detail: `عادت قناة الدفع — ${aed("amountFils") ?? "الدفعة"} تتحرك الآن بالسعر الذي قبلته.`,
+      };
     case "payout.state_changed": {
       const to = str("to") ?? str("stage") ?? "";
       if (to === "reserved") {

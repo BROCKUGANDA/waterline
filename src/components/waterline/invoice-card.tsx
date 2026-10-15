@@ -88,9 +88,16 @@ export function InvoiceCard({
         </div>
 
         {funded ? (
-          <span className="type-label px-2 py-1 rounded-sm bg-success-w/10 text-success-w border border-success-w/30">
-            {invoice.fundingState === "settled" ? T.invoices.settled : T.invoices.funded}
-          </span>
+          invoice.payoutState === "queued" ? (
+            <span className="type-label px-2 py-1 rounded-sm bg-caution-w/10 text-caution-w border border-caution-w/30 flex items-center gap-1.5">
+              <WlIcon name="clock" size={12} />
+              {T.invoices.queuedTitle}
+            </span>
+          ) : (
+            <span className="type-label px-2 py-1 rounded-sm bg-success-w/10 text-success-w border border-success-w/30">
+              {invoice.fundingState === "settled" ? T.invoices.settled : T.invoices.funded}
+            </span>
+          )
         ) : state === "verified" && !overdue ? (
           <span className="type-label px-2.5 py-1.5 rounded-md grad-liquidity text-white flex items-center gap-1.5 elev-1 press-scale">
             <WlIcon name="arrow-out" size={13} />

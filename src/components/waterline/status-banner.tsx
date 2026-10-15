@@ -57,11 +57,8 @@ export function StatusBanner() {
           <span className="type-mono text-[11px] opacity-70 ms-2">{mode}</span>
         </div>
         {status.message && <div className="type-caption opacity-80">{status.message}</div>}
-        {mode === "M2" && (
-          <div className="type-caption opacity-80">
-            {lang === "ar" ? "الأسعار مقفلة — تقبل الآن وتُجدول الدفعات." : "Prices are locked — accept now, payouts queue."}
-          </div>
-        )}
+        {/* M2's dedicated caption is folded into the localized smeSees line
+            below — one honest sentence, not two saying the same thing. */}
         {mode === "M4" && (
           <div className="type-caption opacity-80">
             {lang === "ar" ? "الأرصدة 'حتى' آخر تحديث — لا قراءة صامتة قديمة." : "Balances are \u201cas of\u201d last update — no silent staleness."}

@@ -230,6 +230,10 @@ function QuoteFlow({ invoiceId }: { invoiceId: string }) {
       const res = await accept.mutateAsync({ offerId: offer.id, daysEarly });
       setConfirmOpen(false);
       setPayout(res.payout);
+      if (res.queued) {
+        // M2: honoured at the quoted price, money deferred — say exactly that.
+        toast(T.invoices.queuedTitle, { description: T.invoices.queuedHint });
+      }
     } catch (e) {
       setConfirmOpen(false);
       const msg = e instanceof Error ? e.message : "";
@@ -244,24 +248,28 @@ function QuoteFlow({ invoiceId }: { invoiceId: string }) {
 
   if (invoice?.fundingState === "accepted" || invoice?.fundingState === "settled") {
     const p = detail?.payout ?? payout;
+    const queued = (p as PayoutDto | undefined)?.state === "queued";
     return (
       <div className="space-y-3">
-        <div className="rounded-[10px] border border-success-w/40 bg-success-w/10 p-4">
+        <div className={cn(
+          "rounded-[10px] border p-4",
+          queued ? "border-caution-w/40 bg-caution-w/5" : "border-success-w/40 bg-success-w/10"
+        )}>
           <div className="flex items-center gap-2">
-            <StatusDot tone="success" />
+            <StatusDot tone={queued ? "caution" : "success"} pulse={queued} />
             <span className="type-body-strong">
-              {invoice.fundingState === "settled" ? T.invoices.settled : T.invoices.funded}
+              {invoice.fundingState === "settled" ? T.invoices.settled : queued ? T.invoices.queuedTitle : T.invoices.funded}
             </span>
           </div>
           {invoice.latestOffer?.netProceedsFils != null && (
             <div className="mt-2 flex justify-between items-baseline">
               <span className="type-label text-ink-400">{T.invoices.netProceeds}</span>
-              <Money fils={invoice.latestOffer.netProceedsFils} size="heading" colorize="success" whole={false} />
+              <Money fils={invoice.latestOffer.netProceedsFils} size="heading" colorize={queued ? "accent" : "success"} whole={false} />
             </div>
           )}
         </div>
         {p && p.state !== "settled" && <StageTracker payout={p as PayoutDto} amountFils={(p as PayoutDto).amountFils} />}
-        {invoice.fundingState === "accepted" && <SettleButton invoiceId={invoiceId} />}
+        {invoice.fundingState === "accepted" && !queued && <SettleButton invoiceId={invoiceId} />}
       </div>
     );
   }
