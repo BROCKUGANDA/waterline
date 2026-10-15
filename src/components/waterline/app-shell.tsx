@@ -1,0 +1,219 @@
+"use client";
+
+// WATERLINE — app shell. Desktop: left rail 240px, collapsible to 64px with
+// persistent tooltips. Mobile: four-tab bottom bar with labels always
+// visible — icon-only navigation fails users under stress, which is exactly
+// when this product is used (PRD 11.7).
+
+import { motion } from "framer-motion";
+import { useTheme } from "next-themes";
+import { useUi, type View } from "@/stores/ui";
+import { t, type Lang } from "@/lib/i18n";
+import { WlIcon, WaterlineLogo, type WlIconName } from "./icons";
+import { StatusBanner } from "./status-banner";
+import { cn } from "@/lib/utils";
+
+const NAV: { view: View; icon: WlIconName; label: (l: Lang) => string }[] = [
+  { view: "cash", icon: "wallet", label: (l) => t(l).nav.cash },
+  { view: "invoices", icon: "invoice", label: (l) => t(l).nav.invoices },
+  { view: "escrow", icon: "escrow-lock", label: (l) => t(l).nav.escrow },
+  { view: "activity", icon: "activity", label: (l) => t(l).nav.activity },
+];
+
+const OPS_NAV: { view: View; icon: WlIconName; label: (l: Lang) => string }[] = [
+  { view: "ops", icon: "terminal", label: (l) => t(l).nav.ops },
+];
+
+function RailButton({
+  active, icon, label, collapsed, onClick, onHover,
+}: {
+  active: boolean; icon: WlIconName; label: string; collapsed: boolean; onClick: () => void; onHover?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={onHover}
+      aria-current={active ? "page" : undefined}
+      title={collapsed ? label : undefined}
+      className={cn(
+        "w-full flex items-center gap-3 rounded-md px-3 py-2.5 type-body transition-colors press-scale",
+        active
+          ? "bg-accent-w-soft text-accent-w-dark font-semibold"
+          : "text-ink-600 hover:bg-surface-2 hover:text-foreground"
+      )}
+    >
+      <WlIcon name={icon} size={20} filled={active} />
+      {!collapsed && <span className="truncate">{label}</span>}
+    </button>
+  );
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const { view, setView, lang, toggleLang, railCollapsed, toggleRail } = useUi();
+  const { theme, setTheme } = useTheme();
+  const T = t(lang);
+  const dir = lang === "ar" ? "rtl" : "ltr";
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background" dir={dir}>
+      <StatusBanner />
+
+      <div className="flex flex-1 min-h-0">
+        {/* Desktop rail */}
+        <aside
+          className={cn(
+            "hidden md:flex flex-col shrink-0 border-e border-border bg-sidebar transition-[width] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] sticky top-0 h-screen",
+            railCollapsed ? "w-16" : "w-60"
+          )}
+        >
+          <div className="flex items-center gap-3 px-4 h-16">
+            <WaterlineLogo size={railCollapsed ? 28 : 32} />
+            {!railCollapsed && (
+              <div className="min-w-0">
+                <div className="type-heading tracking-wide">{T.appName}</div>
+                <div className="type-caption text-ink-400 truncate">{T.appTagline}</div>
+              </div>
+            )}
+          </div>
+
+          <nav className="flex-1 px-2 space-y-1 mt-2" aria-label="Primary">
+            {NAV.map((n) => (
+              <RailButton
+                key={n.view}
+                active={view === n.view}
+                icon={n.icon}
+                label={n.label(lang)}
+                collapsed={railCollapsed}
+                onClick={() => setView(n.view)}
+              />
+            ))}
+            <div className="h-px bg-border my-2 mx-2" />
+            {OPS_NAV.map((n) => (
+              <RailButton
+                key={n.view}
+                active={view === n.view}
+                icon={n.icon}
+                label={n.label(lang)}
+                collapsed={railCollapsed}
+                onClick={() => setView(n.view)}
+              />
+            ))}
+          </nav>
+
+          <div className="p-2 space-y-1">
+            <button
+              type="button"
+              onClick={toggleLang}
+              className="w-full flex items-center gap-3 rounded-md px-3 py-2 type-caption text-ink-600 hover:bg-surface-2 press-scale"
+              title="العربية / English"
+            >
+              <WlIcon name="globe" size={20} />
+              {!railCollapsed && <span>{lang === "en" ? "العربية" : "English"}</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="w-full flex items-center gap-3 rounded-md px-3 py-2 type-caption text-ink-600 hover:bg-surface-2 press-scale"
+              title={theme === "dark" ? T.settings.light : T.settings.dark}
+            >
+              <WlIcon name={theme === "dark" ? "sun" : "moon"} size={20} />
+              {!railCollapsed && <span>{theme === "dark" ? T.settings.light : T.settings.dark}</span>}
+            </button>
+            <button
+              type="button"
+              onClick={toggleRail}
+              className="w-full hidden lg:flex items-center gap-3 rounded-md px-3 py-2 type-caption text-ink-400 hover:bg-surface-2 press-scale"
+              title={railCollapsed ? T.expandRail : T.collapseRail}
+            >
+              <WlIcon name="chevron" size={20} className={cn("transition-transform", railCollapsed ? "" : "rotate-180", lang === "ar" && "scale-x-[-1]")} />
+              {!railCollapsed && <span>{T.collapseRail}</span>}
+            </button>
+          </div>
+        </aside>
+
+        {/* Main column */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Mobile header */}
+          <header className="md:hidden sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border">
+            <div className="flex items-center gap-3 px-4 h-14">
+              <WaterlineLogo size={26} />
+              <div className="min-w-0 flex-1">
+                <div className="type-body-strong">{T.appName}</div>
+              </div>
+              <button type="button" onClick={toggleLang} aria-label="Language" className="h-11 w-11 flex items-center justify-center rounded-md text-ink-600 press-scale">
+                <WlIcon name="globe" size={20} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                aria-label={T.settings.theme}
+                className="h-11 w-11 flex items-center justify-center rounded-md text-ink-600 press-scale"
+              >
+                <WlIcon name={theme === "dark" ? "sun" : "moon"} size={20} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("ops")}
+                aria-label={T.nav.ops}
+                className={cn("h-11 w-11 flex items-center justify-center rounded-md press-scale", view === "ops" ? "text-accent-w" : "text-ink-600")}
+              >
+                <WlIcon name="terminal" size={20} />
+              </button>
+            </div>
+          </header>
+
+          <main className="flex-1 w-full max-w-[1240px] mx-auto px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-24 md:pb-10">
+            {children}
+          </main>
+
+          {/* Footer — sticky to bottom, pushed naturally on overflow */}
+          <footer className="mt-auto border-t border-border bg-background">
+            <div className="max-w-[1240px] mx-auto px-4 md:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-x-4 gap-y-1 justify-between">
+              <div className="flex items-center gap-2 text-ink-400">
+                <WlIcon name="waterline" size={16} />
+                <span className="type-caption">
+                  {T.appName} · du SME Challenge — Theme 2 · Creating Liquidity
+                </span>
+              </div>
+              <span className="type-caption text-ink-400">
+                Deterministic rule pack 2026.10.3 · every decision replayable
+              </span>
+            </div>
+          </footer>
+        </div>
+      </div>
+
+      {/* Mobile bottom bar — four tabs, labels always visible */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background/95 backdrop-blur border-t border-border pb-[env(safe-area-inset-bottom)]"
+        aria-label="Primary mobile"
+      >
+        <div className="grid grid-cols-4">
+          {NAV.map((n) => {
+            const active = view === n.view;
+            return (
+              <button
+                key={n.view}
+                type="button"
+                onClick={() => setView(n.view)}
+                aria-current={active ? "page" : undefined}
+                className="relative h-16 flex flex-col items-center justify-center gap-1 press-scale"
+              >
+                {active && (
+                  <motion.span
+                    layoutId="mobile-tab"
+                    className="absolute top-0 inset-x-4 h-[2px] grad-liquidity rounded-full"
+                    transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}
+                  />
+                )}
+                <WlIcon name={n.icon} size={22} filled={active} className={active ? "text-accent-w" : "text-ink-400"} />
+                <span className={cn("type-caption", active ? "text-accent-w font-semibold" : "text-ink-400")}>{n.label(lang)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    </div>
+  );
+}

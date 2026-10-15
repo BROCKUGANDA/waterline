@@ -1,0 +1,302 @@
+// WATERLINE — domain model, PRD Part 2.5 adapted for Prisma + SQLite.
+// Money is stored as INTEGER FILS (1 AED = 100 fils) — never floats (PRD 3.2).
+// Rates are fixed-point integers: priceMilliBpsPerDay = bps/day × 10 (34 = 3.4 bps).
+// Tenant key on every row (PRD 2.3). Enum-like fields are strings (SQLite has no enums).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ── Entities: SMEs, buyers, operators ───────────────────────────────────────
+model Entity {
+  id            String   @id @default(cuid())
+  tenantId      String
+  role          String   @default("sme") // sme | buyer | operator
+  legalName     String
+  tradeLicence  String
+  licenceExpiry DateTime
+  emirate       String
+  sectorCode    String // services | retail | trading | manufacturing | construction | other
+  kybState      String   @default("review") // verified | review | exception
+  tenureMonths  Int      @default(0)
+  billingBand   String   @default("medium") // high | medium | low
+  duPaySuffix   String? // masked du Pay destination, e.g. "•••• 4471"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  buyerLinks  BuyerLink[] @relation("supplierLinks")
+  invoices    Invoice[]  @relation("supplierInvoices")
+}
+
+// ── Buyer relationships (anchor buyers) ─────────────────────────────────────
+model BuyerLink {
+  id                     String   @id @default(cuid())
+  tenantId               String
+  entityId               String
+  buyerName              String
+  buyerTaxId             String
+  buyerEmirate           String
+  tier                   String   @default("unrated") // platinum | gold | silver | bronze | unrated
+  relationshipAgeDays    Int      @default(0)
+  confirmedInvoiceCount  Int      @default(0)
+  avgDaysToPay           Int      @default(45)
+  disputeCount           Int      @default(0)
+  createdAt              DateTime @default(now())
+
+  entity   Entity    @relation("supplierLinks", fields: [entityId], references: [id])
+  invoices Invoice[]
+}
+
+// ── Invoices with verification state machine (PRD 4.2) ─────────────────────
+model Invoice {
+  id                String    @id @default(cuid())
+  tenantId          String
+  entityId          String
+  buyerLinkId       String
+  externalRef       String // invoice number
+  issueDate         DateTime
+  dueDate           DateTime
+  currency          String    @default("AED")
+  grossFils         Int // integer minor units
+  taxFils           Int       @default(0)
+  invoiceHash       String // canonical hash — unique per tenant, globally indexed
+  source            String    @default("upload") // einvoice | buyer_api | upload | du_ap
+  verificationState String    @default("received") // received|parsed|deduped|verified|unverifiable|disputed|superseded|duplicate
+  verifiedVia       String? // einvoice | du_ap | buyer_api | buyer_portal
+  verifiedAt        DateTime?
+  fundingState      String    @default("none") // none | quoted | accepted | settled
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  entity    Entity   @relation("supplierInvoices", fields: [entityId], references: [id])
+  buyerLink BuyerLink @relation(fields: [buyerLinkId], references: [id])
+  offers    Offer[]
+
+  @@unique([tenantId, invoiceHash])
+  @@index([invoiceHash]) // global cross-tenant duplicate detection
+  @@index([entityId, verificationState])
+}
+
+// ── Append-only decision records (PRD 3.4) ─────────────────────────────────
+model Decision {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  subjectRef          String // invoice id / sweep id / contract id
+  subjectType         String   @default("invoice") // invoice | sweep | escrow
+  decisionType        String   @default("advance_offer") // advance_offer | treasury_sweep | escrow_release
+  inputHash           String // sha256:… of canonical feature snapshot
+  rulepackVersion     String
+  featureSnapshot     String // canonical JSON — replayable forever
+  outcome             String // approved | capped | rejected
+  limitFils           Int?
+  advanceRatePermyriad Int? // 9000 = 0.90
+  priceMilliBpsPerDay Int? // fixed-point bps/day ×10
+  bindingRule         String
+  reasonCode          String
+  reasonText          String // plain language, shown to the SME
+  evaluatedAt         DateTime @default(now())
+  actor               String   @default("system")
+  shadow              Boolean  @default(false)
+
+  @@index([tenantId, subjectRef])
+  @@index([inputHash])
+}
+
+// ── Offers ──────────────────────────────────────────────────────────────────
+model Offer {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  invoiceId          String
+  decisionId         String
+  grossFils          Int
+  advanceRatePermyriad Int
+  principalFils      Int
+  rateMilliBps       Int // quoted rate curve anchor
+  expiresAt          DateTime
+  state              String    @default("offered") // offered | accepted | expired
+  // filled at acceptance
+  settlementDate     DateTime?
+  daysEarly          Int?
+  feeFils            Int?
+  netProceedsFils    Int?
+  acceptedAt         DateTime?
+  acceptedIdempotencyKey String?
+  createdAt          DateTime  @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  payout  Payout?
+
+  @@index([tenantId, state])
+}
+
+// ── Payouts — 4-stage pipeline (PRD 11.13) ─────────────────────────────────
+model Payout {
+  id              String   @id @default(cuid())
+  tenantId        String
+  offerId         String   @unique
+  idempotencyKey  String   @unique // provider-facing key derived from offerId — duplicate payout impossible
+  rail            String   @default("dupay") // dupay | aani
+  destinationRef  String
+  amountFils      Int
+  state           String   @default("accepted") // accepted|reserved|sent|settled|failed|confirming
+  providerRef     String?
+  attempts        Int      @default(0)
+  lastErrorCode   String?
+  acceptedAt      DateTime @default(now())
+  reservedAt      DateTime?
+  sentAt          DateTime?
+  settledAt       DateTime?
+  reconciledAt    DateTime?
+  etaSeconds      Int      @default(18)
+
+  offer Offer @relation(fields: [offerId], references: [id])
+}
+
+// ── Escrow: contracts + milestones (PRD 4.4) ───────────────────────────────
+model EscrowContract {
+  id              String   @id @default(cuid())
+  tenantId        String
+  supplierEntityId String
+  buyerName       String
+  buyerEntityName String
+  custodianRef    String
+  description     String
+  totalFils       Int
+  state           String   @default("funded") // funded | active | completed | terminated
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  milestones Milestone[]
+}
+
+model Milestone {
+  id              String    @id @default(cuid())
+  contractId      String
+  sequence        Int
+  description     String
+  amountFils      Int
+  conditionType   String // buyer_approval | document_review | time_release
+  reviewWindowDays Int     @default(3)
+  evidenceRef     String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  metAt           DateTime?
+  releasedAt      DateTime?
+  state           String    @default("pending") // pending | in_review | met | released | disputed
+  createdAt       DateTime  @default(now())
+
+  contract EscrowContract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId, sequence])
+}
+
+// ── Treasury: policy, obligations, sweeps (PRD 4.5) ─────────────────────────
+model TreasuryPolicy {
+  id                    String   @id @default("singleton")
+  tenantId              String   @unique
+  floorFils             Int      @default(5000000) // absolute minimum balance — never breached
+  horizonDays           Int      @default(14)
+  safetyMarginPermyriad Int      @default(1500) // 15% — widens with forecast error
+  autoPilotEnabled      Boolean  @default(false)
+  updatedAt             DateTime @updatedAt
+}
+
+model Obligation {
+  id                String   @id @default(cuid())
+  tenantId          String
+  label             String
+  kind              String // payroll | rent | vat | supplier | du_bill | custom
+  dueDate           DateTime
+  amountFils        Int
+  cadence           String   @default("once") // once | weekly | monthly
+  confidencePermyriad Int    @default(9000) // obligation-detection confidence
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+}
+
+model Sweep {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  direction           String // out | in
+  amountFils          Int
+  instrumentRef       String // e.g. MMF: Emirates Short Duration
+  floorAtDecisionFils Int
+  state               String   @default("swept") // swept | recalled | rejected
+  yieldFils           Int      @default(0)
+  reasonCode          String?
+  createdAt           DateTime @default(now())
+  recalledAt          DateTime?
+
+  @@index([tenantId, state])
+}
+
+// ── Ledger: double-entry, entries only — balances are derived (PRD 2.5) ────
+model LedgerEntry {
+  id             String   @id @default(cuid())
+  tenantId       String
+  txnId          String
+  accountCode    String // e.g. funding.pool, sme.wallet:{tenant}, income.fees, reserve.held
+  direction      String // debit | credit
+  amountFils     Int // always positive; direction carries the sign
+  valueDate      DateTime
+  postedAt       DateTime @default(now())
+  sourceEventId  String // idempotency: unique per tenant (PRD 6.2)
+  memo           String?
+
+  @@unique([tenantId, sourceEventId])
+  @@index([txnId])
+  @@index([accountCode])
+}
+
+// ── Consents (PRD 4.1) ──────────────────────────────────────────────────────
+model ConsentGrant {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  purpose            String // billing_history | bank_data | buyer_contact
+  scopeJson          String // JSON array of scopes
+  grantedAt          DateTime  @default(now())
+  expiresAt          DateTime?
+  revokedAt          DateTime?
+  provider           String    @default("du_business")
+  providerConsentRef String?
+}
+
+// ── Event log (transactional outbox — written with the state change) ───────
+model AppEvent {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  type        String // invoice.verified, decision.recorded, offer.accepted, payout.settled, escrow.released, sweep.executed, status.changed…
+  subjectRef  String?
+  payloadJson String   @default("{}")
+  occurredAt  DateTime @default(now())
+  sequence    Int      @default(0)
+
+  @@index([tenantId, type])
+}
+
+// ── System status: degrade modes M0–M4, kill switches, breaker states ──────
+model StatusState {
+  id              String   @id @default("singleton")
+  mode            String   @default("M0") // M0 normal | M1 cautious | M2 quote_only | M3 funding_suspended | M4 read_only
+  killSwitchesJson String  @default("{\"global\":false,\"dynamicDiscounting\":false,\"escrow\":false,\"treasury\":false,\"tenant\":false,\"buyer\":false,\"sector\":false,\"rail\":false}")
+  breakersJson    String   @default("{\"dupay\":\"closed\",\"aani\":\"closed\",\"openfinance\":\"closed\",\"einvoice\":\"closed\",\"custodian\":\"closed\",\"notification\":\"closed\"}")
+  message         String?
+  updatedAt       DateTime @updatedAt
+}
+
+// ── Operator actions — same append-only audit store (PRD 8.2) ──────────────
+model OperatorAction {
+  id          String   @id @default(cuid())
+  actor       String
+  action      String // mode_transition, kill_switch, replay, manual_release, breaker_sim
+  targetRef   String?
+  reason      String
+  detailJson  String   @default("{}")
+  createdAt   DateTime @default(now())
+}

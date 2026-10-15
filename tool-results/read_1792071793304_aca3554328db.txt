@@ -1,0 +1,1343 @@
+     1→     1→===== PAGE 1 =====
+     2→     2→WATERLINE
+     3→     3→Product requirements, design
+     4→     4→system and master build
+     5→     5→specification
+     6→     6→Everything required to build the WATERLINE liquidity layer to
+     7→     7→production standard, with no gaps left to interpretation.
+     8→     8→Companion to the product concept and execution plan. Covers domain model and
+     9→     9→architecture, the deterministic rule pack, every core flow, API behaviour, reliability
+    10→    10→engineering, edge cases, failsafe modes, backtesting and model governance, security
+    11→    11→and compliance, the complete design system, observability, testing, the production
+    12→    12→readiness checklist, and a master build prompt written to be executed without
+    13→    13→omission.
+    14→    14→DOCUMENT TRACK STATUS DATE
+    15→    15→PRD v1.0 Theme 2 — Creating Build-ready 15 October 2026
+    16→    16→Liquidity
+    17→    17→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 1
+    18→    18→
+    19→    19→===== PAGE 2 =====
+    20→    20→PART 1
+    21→    21→Product definition
+    22→    22→WATERLINE is a liquidity layer embedded in du Business that converts approved invoices and
+    23→    23→idle balances into usable cash, priced deterministically and settled over licensed rails.
+    24→    24→1.1 Problem statement
+    25→    25→A UAE SME holding a buyer-approved invoice waits 45 to 90 days for cash it has already earned. The capital is not at
+    26→    26→risk and the amount is not in dispute; it is queuing. During the queue the business cannot act on opportunity or absorb
+    27→    27→shock. Conventional remedies — a bank facility or factoring — require the business to prove creditworthiness it has
+    28→    28→already demonstrated, on a timeline that misses the opportunity. The addressable inefficiency is the queue itself, not
+    29→    29→the SME's access to credit.
+    30→    30→1.2 Users and jobs to be done
+    31→    31→PERSONA CONTEXT JOB TO BE DONE
+    32→    32→SME owner-operator 1–20 staff, no finance function, manages cash "Tell me what I can safely spend this week,
+    33→    33→from a phone between operational tasks. and let me get paid now when I need to
+    34→    34→move."
+    35→    35→SME finance lead 20–200 staff, part-time or single-person finance "Give me a reliable forward view and let me
+    36→    36→function, uses accounting software and close the gap without starting a loan
+    37→    37→spreadsheets. application."
+    38→    38→Anchor buyer AP clerk Enterprise accounts payable, processes "Let me confirm invoices in bulk and
+    39→    39→hundreds of invoices weekly, measured on capture discounts without adding steps to
+    40→    40→cycle time and error rate. my process."
+    41→    41→du operations analyst Monitors the funding book, resolves exceptions, "Show me what needs a human, why, and
+    42→    42→answers SME queries. give me the authority to resolve it with a
+    43→    43→trail."
+    44→    44→Risk and compliance officer Accountable to CBUAE and internal audit for "Prove to me that this decision was made
+    45→    45→every automated decision. by a rule I approved, and replay it on
+    46→    46→demand."
+    47→    47→Funder credit officer Deploys bank or fund capital against the "Show me loss performance by cohort,
+    48→    48→receivables book. concentration, and the controls that bound
+    49→    49→my downside."
+    50→    50→1.3 Scope
+    51→    51→In scope, Phase 1 Dynamic discounting on buyer-approved receivables; milestone escrow via programmable
+    52→    52→mandate at a licensed bank; treasury autopilot into low-risk short-term instruments; cash-flow
+    53→    53→forecasting; buyer confirmation portal; dispute workflow; operator console; SME mobile and
+    54→    54→web experience embedded in du Business; Arabic and RTL.
+    55→    55→In scope, Phase 2 Open Finance account information and payment initiation at depth; e-invoice verification at
+    56→    56→source; multi-funder allocation engine; anchor-buyer ERP connectors; supplier-initiated early
+    57→    57→payment requests.
+    58→    58→Phase 3, flagged Tokenised recurring revenue for upfront capital, pending CBUAE and VARA guidance. Fully
+    59→    59→specified, feature-flagged, zero dependency from Phases 1 and 2.
+    60→    60→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 2
+    61→    61→
+    62→    62→===== PAGE 3 =====
+    63→    63→Explicitly out of scope Unsecured lending of any kind; consumer credit; FX and cross-border payments; crypto
+    64→    64→custody or trading; insurance; any write path into du BSS; any participation in rating or
+    65→    65→charging.
+    66→    66→1.4 Product principles
+    67→    67→No model decides who gets paid. Machine learning forecasts and ranks; a deterministic versioned rule pack
+    68→    68→decides and prices. Always.
+    69→    69→Every decision is replayable. Input hash, rule-pack version, resolved parameters, outcome, plain-language
+    70→    70→reason — written append-only at decision time, not reconstructed.
+    71→    71→Show the arithmetic. The SME sees days early, rate, fee in dirhams and net proceeds before accepting, and the
+    72→    72→same numbers afterwards.
+    73→    73→Degrade, never fail. Five declared modes. Partial service with honest status beats a blank screen.
+    74→    74→The SME's floor is absolute. Treasury autopilot never breaches the minimum balance the SME sets, under any
+    75→    75→optimisation.
+    76→    76→Exceptions surface, never silently fail. An SME must never learn about a problem by noticing money has not
+    77→    77→arrived.
+    78→    78→One binary. Pilot and full base run identical code behind flags. No pilot build to throw away.
+    79→    79→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 3
+    80→    80→
+    81→    81→===== PAGE 4 =====
+    82→    82→PART 2
+    83→    83→Architecture
+    84→    84→2.1 Service topology
+    85→    85→Twelve services, each independently deployable, communicating over authenticated internal APIs for synchronous
+    86→    86→work and an event log for asynchronous work. All services on the funding path are stateless.
+    87→    87→SERVICE RESPONSIBILITY PATH
+    88→    88→identity SME and staff identity, UAE Pass and du SSO federation, session, entitlement, role. Hot
+    89→    89→consent Scoped, revocable consent capture; purpose registry; enforcement hooks; revocation Hot
+    90→    90→propagation.
+    91→    91→registry Entities, trade licences, UBO, bank accounts, buyer relationships, KYB state. Warm
+    92→    92→invoice Invoice ingestion, normalisation to the Peppol model, hashing, duplicate detection, Warm
+    93→    93→verification state machine.
+    94→    94→ruleengine Deterministic evaluation of the active rule pack. Pure function: no I/O during evaluation, no Hot
+    95→    95→clock access, no randomness.
+    96→    96→forecast Cash-flow forecasting, obligation detection, risk ranking, anomaly scoring. Advisory only; Warm
+    97→    97→produces features, never decisions.
+    98→    98→decision Orchestrates a decision: assembles features, calls ruleengine, writes the immutable Hot
+    99→    99→decision record, emits the event.
+   100→   100→ledger Double-entry ledger of record. Every movement is a balanced transaction; balances are Hot
+   101→   101→derived, never stored as truth.
+   102→   102→payout Money movement orchestration over du Pay and Aani. Idempotent, signed, reconciled. Hot
+   103→   103→escrow Milestone contract lifecycle, condition evaluation, release instruction to the custodian bank. Warm
+   104→   104→treasury Sweep and recall engine, floor enforcement, obligation calendar, instrument allocation. Warm
+   105→   105→audit Append-only decision and event store, retention, legal hold, regulatory retrieval. Cold
+   106→   106→2.2 Hot, warm and cold paths
+   107→   107→Separating paths by latency budget is what keeps analytics load from ever contending with a payout.
+   108→   108→PATH BUDGET AND STORAGE CARRIES
+   109→   109→Hot p99 under 400 ms. In-memory cache Authentication, balance display, limit and price
+   110→   110→plus primary Postgres. Served active- quote, offer acceptance, payout initiation, status.
+   111→   111→active from both zones.
+   112→   112→Warm Seconds to minutes. Queue-driven, Invoice verification, buyer confirmation, forecast
+   113→   113→primary Postgres plus search index. refresh, escrow condition evaluation, sweep
+   114→   114→calculation, reconciliation, notification.
+   115→   115→Cold Minutes to hours. Object storage, Backtesting, shadow pricing, portfolio analytics,
+   116→   116→columnar warehouse, immutable audit regulatory retrieval, statement generation, model
+   117→   117→store. training.
+   118→   118→A quote is served hot from precomputed eligibility and a cached rule pack. Nothing on the hot path calls an external
+   119→   119→provider synchronously: if fresh bank data is needed, the quote is served from last-known-good with an explicit
+   120→   120→freshness indicator, and the refresh happens warm.
+   121→   121→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 4
+   122→   122→
+   123→   123→===== PAGE 5 =====
+   124→   124→2.3 Multi-tenancy and partitioning
+   125→   125→Tenant key on every row. Enforced by Postgres row-level security, not by application discipline. A query without
+   126→   126→tenant context returns nothing.
+   127→   127→Hash partitioning of high-volume tables (invoice, decision, ledger_entry, event) by tenant, so account growth
+   128→   128→does not degrade per-account performance.
+   129→   129→Per-tenant quotas on request rate, concurrent decisions and queue depth, so no single tenant can consume
+   130→   130→shared capacity.
+   131→   131→Connection pooling per partition group with bulkheads, so saturation in one group cannot exhaust the pool for
+   132→   132→others.
+   133→   133→2.4 Active-active
+   134→   134→Two UAE availability zones serve live traffic simultaneously. Both are primary for reads and writes on the hot path.
+   135→   135→Data Synchronous replication for the ledger and decision store — correctness over latency, no
+   136→   136→exceptions. Asynchronous replication for search, cache and analytics.
+   137→   137→Conflict policy Money movement is partitioned by tenant to a home zone, so two zones never write the same
+   138→   138→ledger account concurrently. On failover the home zone is reassigned, never shared.
+   139→   139→Objectives RPO zero for ledger and decision records. RTO 15 minutes for full service, 2 minutes for
+   140→   140→degraded read-only.
+   141→   141→Drill cadence Zone failover drilled monthly in staging and quarterly in production during a declared window,
+   142→   142→with the result published internally. An undrilled failover is assumed broken.
+   143→   143→2.5 Core data model
+   144→   144→entity id, tenant_id, legal_name, trade_licence, licence_expiry,
+   145→   145→emirate, sector_code, kyb_state, ubo[], created_at
+   146→   146→buyer_link id, tenant_id, entity_id, buyer_entity_id, relationship_age_days,
+   147→   147→confirmed_invoice_count, avg_days_to_pay, dispute_count, tier
+   148→   148→invoice id, tenant_id, entity_id, buyer_link_id, external_ref,
+   149→   149→issue_date, due_date, currency, gross_amount, tax_amount,
+   150→   150→invoice_hash, source(einvoice|buyer_api|upload|du_ap),
+   151→   151→verification_state, verified_at, peppol_doc_ref
+   152→   152→decision id, tenant_id, subject_ref, decision_type, input_hash,
+   153→   153→rulepack_version, feature_snapshot_ref, outcome,
+   154→   154→limit_amount, price_bps_per_day, reason_code, reason_text,
+   155→   155→evaluated_at, actor, shadow(bool)
+   156→   156→offer id, tenant_id, invoice_id, decision_id, advance_rate,
+   157→   157→fee_amount, net_proceeds, settlement_date, expires_at, state
+   158→   158→ledger_entry id, tenant_id, txn_id, account_code, direction, amount,
+   159→   159→currency, value_date, posted_at, source_event_id
+   160→   160→payout id, tenant_id, offer_id, idempotency_key, rail(dupay|aani),
+   161→   161→destination_ref, amount, state, provider_ref, attempts,
+   162→   162→last_error_code, reconciled_at
+   163→   163→escrow_contract id, tenant_id, buyer_entity_id, supplier_entity_id,
+   164→   164→custodian_ref, total_amount, milestones[], state
+   165→   165→milestone id, contract_id, sequence, description, amount,
+   166→   166→condition_type, evidence_ref, approved_by, approved_at, state
+   167→   167→sweep id, tenant_id, direction(out|in), amount, instrument_ref,
+   168→   168→floor_at_decision, obligation_window_json, state
+   169→   169→consent_grant id, tenant_id, entity_id, purpose, scope[], granted_at,
+   170→   170→expires_at, revoked_at, provider, provider_consent_ref
+   171→   171→event id, tenant_id, type, payload_ref, occurred_at, sequence,
+   172→   172→caused_by_event_id, idempotency_key
+   173→   173→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 5
+   174→   174→
+   175→   175→===== PAGE 6 =====
+   176→   176→Invariants enforced in the database, not the application: every txn_id in ledger_entry sums to zero across
+   177→   177→directions; invoice_hash is unique per tenant and globally indexed for cross-tenant duplicate detection; decision
+   178→   178→rows are insert-only with no update or delete grant on any application role; payout.idempotency_key is unique per
+   179→   179→tenant.
+   180→   180→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 6
+   181→   181→
+   182→   182→===== PAGE 7 =====
+   183→   183→PART 3
+   184→   184→The rule pack
+   185→   185→The rule pack is the single place where eligibility, limits and prices are decided. It is data, not
+   186→   186→code, and it is versioned, signed, replayable and promotable independently of any deployment.
+   187→   187→3.1 Structure
+   188→   188→rulepack:
+   189→   189→version: "2026.10.3" # immutable once promoted
+   190→   190→signed_by: "risk-committee"
+   191→   191→effective_from: "2026-10-15T00:00:00Z"
+   192→   192→eligibility:
+   193→   193→- id: E01 when: entity.kyb_state != 'verified' then: reject(E_KYB)
+   194→   194→- id: E02 when: entity.licence_expiry < today + 30d then: reject(E_LICENCE)
+   195→   195→- id: E03 when: invoice.verification_state != 'verified' then: reject(E_UNVERIFIED)
+   196→   196→- id: E04 when: invoice.due_date < today then: reject(E_OVERDUE)
+   197→   197→- id: E05 when: invoice.gross_amount < 2000 AED then: reject(E_MIN_SIZE)
+   198→   198→- id: E06 when: buyer_link.tier == 'unrated'
+   199→   199→and buyer_link.confirmed_invoice_count < 3 then: cap(advance_rate, 0.60)
+   200→   200→limits:
+   201→   201→base: min(0.90 * invoice.gross, entity_cap, buyer_cap, sector_cap)
+   202→   202→entity_cap: f(tenure_months, billing_behaviour_band, confirmed_history)
+   203→   203→buyer_cap: f(buyer_tier, avg_days_to_pay, dispute_rate)
+   204→   204→sector_cap: table(sector_code)
+   205→   205→portfolio: hard_stop if book_exposure > portfolio_ceiling
+   206→   206→pricing:
+   207→   207→rate_bps_per_day: base_curve(buyer_tier) + risk_adj(features) + funding_cost
+   208→   208→floor_bps: 1.2 ceiling_bps: 9.0
+   209→   209→fee = net_days_early * rate_bps_per_day * principal / 10000
+   210→   210→explanations:
+   211→   211→E_KYB: "We need your trade licence verified before we can price this."
+   212→   212→E_LICENCE: "Your trade licence expires within 30 days. Renew to continue."
+   213→   213→E_UNVERIFIED: "Your buyer hasn't confirmed this invoice yet."
+   214→   214→...
+   215→   215→3.2 Determinism guarantees
+   216→   216→Pure evaluation. ruleengine performs no I/O, reads no clock and uses no randomness. Time and all features
+   217→   217→are passed in as an explicit, hashed feature snapshot.
+   218→   218→Hashed inputs. The feature snapshot is canonicalised and hashed; the hash is stored on the decision. Replaying
+   219→   219→the same hash against the same pack version must produce a byte-identical outcome, and this is asserted in CI.
+   220→   220→No silent fallback. A missing feature is a typed rejection with a reason code, never a default value substituted
+   221→   221→quietly.
+   222→   222→Decimal arithmetic. All money is integer minor units; all rates are fixed-point. No floating point touches a
+   223→   223→monetary calculation anywhere in the system.
+   224→   224→3.3 Promotion lifecycle
+   225→   225→1 — Author Change proposed as a diff against the active pack, with rationale and expected population
+   226→   226→impact.
+   227→   227→2 — Shadow Candidate evaluated against 12 months of history and 30 days of live traffic in parallel.
+   228→   228→Outcome deltas reported by segment: approvals gained and lost, price moves, limit moves,
+   229→   229→expected loss change.
+   230→   230→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 7
+   231→   231→
+   232→   232→===== PAGE 8 =====
+   233→   233→3 — Review Risk committee signs the pack. Fairness dispersion across sector, size and emirate is
+   234→   234→reviewed as a required gate.
+   235→   235→4 — Canary Promoted to 5% of tenants for 72 hours with automatic rollback on guardrail breach.
+   236→   236→5 — Promote Full promotion. The prior pack remains loadable forever for replay; nothing is ever deleted.
+   237→   237→Rollback Pointer change to the previous version, effective within 60 seconds, requiring no deployment.
+   238→   238→3.4 Decision record
+   239→   239→{ "decision_id":"dec_01J...", "tenant_id":"t_8821", "subject_ref":"inv_7741",
+   240→   240→"decision_type":"advance_offer", "rulepack_version":"2026.10.3",
+   241→   241→"input_hash":"sha256:9f2c...", "feature_snapshot_ref":"s3://audit/fs/9f2c...",
+   242→   242→"outcome":"approved", "limit_amount":4200000, "price_bps_per_day":3.4,
+   243→   243→"binding_rule":"L02:buyer_cap", "reason_code":"OK_CAPPED_BY_BUYER",
+   244→   244→"reason_text":"Approved at AED 42,000. Capped by this buyer's limit, which
+   245→   245→grows as they settle more invoices on time.",
+   246→   246→"evaluated_at":"2026-10-15T09:14:22.881Z", "actor":"system", "shadow":false }
+   247→   247→Written append-only before the offer is shown to the SME. If the write fails, the offer is not shown — the audit record
+   248→   248→is a precondition of the decision, not a side effect of it.
+   249→   249→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 8
+   250→   250→
+   251→   251→===== PAGE 9 =====
+   252→   252→PART 4
+   253→   253→Core flows
+   254→   254→4.1 Onboarding and consent
+   255→   255→Target: under three minutes, zero documents uploaded in the standard path.
+   256→   256→01 Entry
+   257→   257→SME taps WATERLINE in du Business. Already authenticated via du SSO; no new credential is created.
+   258→   258→02 Identity
+   259→   259→UAE Pass step-up for the principal. Trade licence and establishment card verified against registry data. KYB
+   260→   260→state moves to verified or into a typed exception queue.
+   261→   261→03 Consent
+   262→   262→Scoped consent presented in plain language, one purpose per toggle: billing history, bank data via Open
+   263→   263→Finance, buyer confirmation contact. Each is independently revocable and each shows exactly what it
+   264→   264→unlocks.
+   265→   265→04 First value
+   266→   266→Before any invoice is uploaded, the SME sees its indicative limit derived from du billing history alone. This is
+   267→   267→the activation moment and it requires nothing from the user.
+   268→   268→Revocation propagates within 60 seconds: dependent features disable immediately, derived features are purged
+   269→   269→within 24 hours, and existing funded positions continue to their contractual conclusion with that fact disclosed at
+   270→   270→revocation time.
+   271→   271→4.2 Invoice verification state machine
+   272→   272→received ──normalise──> parsed ──hash──> deduped
+   273→   273→deduped ──einvoice match──> verified
+   274→   274→deduped ──buyer confirm──> verified
+   275→   275→deduped ──du AP file match──> verified
+   276→   276→deduped ──no route──> unverifiable(reason)
+   277→   277→parsed ──hash collision──> duplicate(ref to original)
+   278→   278→verified ──buyer disputes──> disputed ──resolve──> verified | written_off
+   279→   279→verified ──buyer amends──> superseded(new invoice id)
+   280→   280→Hashing Canonical hash over buyer tax ID, supplier tax ID, invoice number, gross amount and issue
+   281→   281→date. Resistant to reformatting and whitespace, sensitive to any material change.
+   282→   282→Cross-tenant check The hash index is global. The same receivable presented by two tenants is caught even
+   283→   283→though the data is tenant-isolated, with the collision routed to fraud review and never auto-
+   284→   284→rejected.
+   285→   285→Verification priority E-invoice registry, then du AP file, then buyer API callback, then buyer portal single-click.
+   286→   286→Weaker routes carry a lower advance-rate cap set in the rule pack.
+   287→   287→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 9
+   288→   288→
+   289→   289→===== PAGE 10 =====
+   290→   290→4.3 Pricing, acceptance and payout
+   291→   291→01 Quote
+   292→   292→decision assembles the feature snapshot, calls ruleengine, writes the decision record, returns limit and
+   293→   293→rate. Budget: p99 under 400 ms, served without any synchronous external call.
+   294→   294→02 Model
+   295→   295→The SME moves a date slider and sees fee and net proceeds recompute locally against the quoted rate curve.
+   296→   296→No server round trip, so the interaction is instant and works on poor connectivity.
+   297→   297→03 Accept
+   298→   298→Offer accepted with the decision ID and a client idempotency key. The offer is re-validated server-side against
+   299→   299→its expiry and the current pack; a changed price is surfaced explicitly and requires fresh acceptance, never
+   300→   300→applied silently.
+   301→   301→04 Reserve and post
+   302→   302→Funding source reserved, assignment recorded, ledger transaction posted. Ledger commit and payout
+   303→   303→initiation are bound by an outbox so that a committed ledger entry always has exactly one payout attempt.
+   304→   304→05 Settle
+   305→   305→Payout dispatched to du Pay or Aani with the idempotency key. Terminal success, terminal failure or timeout;
+   306→   306→timeouts are resolved by reconciliation rather than by retrying blindly.
+   307→   307→06 Notify and reconcile
+   308→   308→SME notified through du's gateway. Daily statement reconciliation to the dirham, with any break escalated
+   309→   309→same day.
+   310→   310→4.4 Escrow lifecycle
+   311→   311→Funds are held at a licensed custodian bank under a programmable mandate. WATERLINE never holds client money.
+   312→   312→Award Buyer funds the contract at the custodian. Supplier sees confirmed, locked funds before
+   313→   313→starting work — the single most valuable moment in the product.
+   314→   314→Milestone conditions Three types: explicit buyer approval, document-evidenced delivery with buyer review window,
+   315→   315→and time-based release with buyer veto. Each is a declared condition in the contract,
+   316→   316→evaluated by escrow and instructed to the custodian.
+   317→   317→Release On condition satisfaction, release is instructed automatically. Buyer inaction inside a declared
+   318→   318→review window is itself a declared condition, which removes the most common cause of stalled
+   319→   319→milestone payments.
+   320→   320→Dispute Either party raises a dispute; the disputed milestone freezes while undisputed milestones
+   321→   321→continue. Resolution is logged with evidence and the state transition is auditable.
+   322→   322→Termination Unreleased funds return to the buyer under the contract's declared termination terms, with the
+   323→   323→full milestone history exportable for any downstream proceeding.
+   324→   324→4.5 Treasury autopilot
+   325→   325→The SME sets one number: the minimum balance it will never drop below. Everything else is derived.
+   326→   326→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 10
+   327→   327→
+   328→   328→===== PAGE 11 =====
+   329→   329→Obligation calendar Built from payroll cadence, rent, VAT deadlines, recurring supplier payments and du's own
+   330→   330→billing cycle, plus any obligation the SME adds manually. Forward-looking, not inferred from
+   331→   331→the past alone.
+   332→   332→Sweepable amount balance − floor − obligations(horizon) − safety_margin. Safety margin scales
+   333→   333→with forecast error for that tenant, so a volatile business is swept more conservatively.
+   334→   334→Instruments Low-risk short-term only, with a published maximum maturity and same-day or next-day
+   335→   335→liquidity. Instrument eligibility is rule-pack data, so it is reviewable and changeable without a
+   336→   336→deployment.
+   337→   337→Recall Automatic ahead of every detected obligation with a margin. A recall that would arrive late is
+   338→   338→never initiated; the sweep that would have required it is not made in the first place.
+   339→   339→Hard guarantee No optimisation, no yield opportunity and no operator override may breach the floor. This is
+   340→   340→enforced in ruleengine as a hard stop, and it is the single most heavily tested invariant in
+   341→   341→the system.
+   342→   342→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 11
+   343→   343→
+   344→   344→===== PAGE 12 =====
+   345→   345→PART 5
+   346→   346→API behaviour
+   347→   347→5.1 Conventions
+   348→   348→Transport HTTPS only, TLS 1.3 minimum. Internal service-to-service uses mutual TLS with short-lived
+   349→   349→certificates issued by an internal CA.
+   350→   350→Auth OAuth 2.1 client credentials for partner and service clients; OIDC with UAE Pass step-up for
+   351→   351→SME principals. Tokens are audience-scoped, maximum 15-minute lifetime, never passed in
+   352→   352→query strings.
+   353→   353→Versioning Path major version (/v1/) plus a date-pinned minor via X-API-Version. Breaking changes
+   354→   354→require a new major; two majors are supported concurrently for a minimum of 12 months.
+   355→   355→Idempotency Idempotency-Key is required on every POST, PUT and PATCH that moves money or
+   356→   356→creates a binding obligation. Keys are client-generated UUIDv7, scoped per tenant, retained
+   357→   357→24 hours. Replay returns the original response with Idempotent-Replay: true.
+   358→   358→Pagination Opaque cursor only; offset pagination is not offered. Default page 50, maximum 200. Cursors
+   359→   359→encode a stable sort key and are valid 24 hours.
+   360→   360→Rate limits Token bucket per tenant per endpoint class. Responses always carry RateLimit-Limit,
+   361→   361→RateLimit-Remaining, RateLimit-Reset. 429 always carries Retry-After.
+   362→   362→Errors RFC 9457 application/problem+json with a stable machine code, human detail,
+   363→   363→trace_id and, where applicable, retryable: true|false. Error codes are a public
+   364→   364→contract and never repurposed.
+   365→   365→Time and money All timestamps RFC 3339 UTC with milliseconds. All amounts integer minor units plus explicit
+   366→   366→ISO-4217 currency. Never a float, never a bare number.
+   367→   367→Tracing traceparent accepted and propagated end to end. Every response returns trace_id,
+   368→   368→including errors, so support can locate any transaction from a screenshot.
+   369→   369→5.2 Endpoint catalogue
+   370→   370→METHOD AND PATH PURPOSE IDEM. P99 BUDGET
+   371→   371→POST /v1/entities Register an SME entity and begin KYB Required 800 ms
+   372→   372→POST /v1/consents Grant scoped consent for a declared purpose Required 400 ms
+   373→   373→DELETE /v1/consents/{id} Revoke consent, propagating within 60 s n/a 400 ms
+   374→   374→POST /v1/invoices Submit an invoice for verification Required 600 ms
+   375→   375→POST /v1/invoices/{id}/confirm Buyer confirms amount and due date Required 600 ms
+   376→   376→GET /v1/invoices/{id}/quote Deterministic limit and price quote n/a 400 ms
+   377→   377→POST /v1/offers/{id}/accept Accept an offer and trigger funding Required 1200 ms
+   378→   378→GET /v1/payouts/{id} Payout state and provider reference n/a 300 ms
+   379→   379→POST /v1/escrow/contracts Create a milestone escrow contract Required 900 ms
+   380→   380→POST /v1/escrow/milestones/{id}/approve Approve a milestone, triggering release Required 900 ms
+   381→   381→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 12
+   382→   382→
+   383→   383→===== PAGE 13 =====
+   384→   384→METHOD AND PATH PURPOSE IDEM. P99 BUDGET
+   385→   385→PUT /v1/treasury/policy Set floor, horizon and instrument preferences Required 500 ms
+   386→   386→GET /v1/treasury/projection Forward cash projection with obligations n/a 700 ms
+   387→   387→GET /v1/decisions/{id} Full decision record with reason and pack version n/a 400 ms
+   388→   388→POST /v1/decisions/{id}/replay Re-evaluate a stored input hash for audit Required 2000 ms
+   389→   389→GET /v1/statements/{period} Signed period statement, cold path n/a 5000 ms
+   390→   390→5.3 Error taxonomy
+   391→   391→HTTP CODE MEANING CLIENT ACTION
+   392→   392→400 invalid_request Schema or semantic validation failed Fix and resubmit. Never retry unchanged.
+   393→   393→401 unauthenticated Token missing, expired or wrong audience Refresh token, retry once.
+   394→   394→403 consent_required Operation needs a consent that is absent or Drive consent flow. Do not retry.
+   395→   395→revoked
+   396→   396→404 not_found Resource absent or outside tenant scope Do not retry.
+   397→   397→409 idempotency_conflict Key reused with a different payload Bug in the client. Alert, do not retry.
+   398→   398→409 offer_expired Offer lapsed or pack changed since quote Re-quote and present the new price explicitly.
+   399→   399→409 duplicate_invoice Invoice hash already present Surface the original. Route to review if cross-
+   400→   400→tenant.
+   401→   401→422 rule_rejected Deterministic rejection with reason code Show the plain-language reason. Never retry.
+   402→   402→423 kill_switch_active Funding suspended by an operator or Show degraded status. Poll status endpoint.
+   403→   403→guardrail
+   404→   404→429 rate_limited Quota exhausted Honour Retry-After exactly.
+   405→   405→500 internal_error Unexpected failure, already alerted Retry with backoff. Safe only with idempotency
+   406→   406→key.
+   407→   407→502/504 upstream_unavailable Provider down or timed out Retry with backoff; reconcile if money may have
+   408→   408→moved.
+   409→   409→503 degraded Service in a declared degrade mode Read degrade_mode and adapt the UI.
+   410→   410→5.4 Webhooks
+   411→   411→Signed with HMAC-SHA256 over timestamp and raw body, in WATERLINE-Signature, with a 5-minute tolerance
+   412→   412→window to bound replay.
+   413→   413→At-least-once delivery. Consumers must dedupe on event_id, and this requirement is stated in the contract
+   414→   414→rather than assumed.
+   415→   415→Ordered per subject via a monotonic sequence. Consumers must tolerate reordering across subjects and are
+   416→   416→given the sequence to do so.
+   417→   417→Retries for 24 hours on exponential backoff, then to a dead-letter queue with operator notification and a manual
+   418→   418→replay endpoint.
+   419→   419→No sensitive payloads. Events carry references, not financial detail; the consumer fetches detail over the
+   420→   420→authenticated API.
+   421→   421→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 13
+   422→   422→
+   423→   423→===== PAGE 14 =====
+   424→   424→PART 6
+   425→   425→Reliability engineering
+   426→   426→6.1 Retries and exponential backoff
+   427→   427→One retry policy, defined centrally, applied by every client. Per-call overrides are a review finding, not a convenience.
+   428→   428→delay(n) = min(cap, base * 2^n) * jitter jitter ~ U(0.5, 1.5) # full jitter
+   429→   429→class base cap max_attempts budget retry_on
+   430→   430→hot_read 50ms 800ms 3 1.5s 503,504,timeout
+   431→   431→quote 80ms 1s 2 2s 503,504,timeout
+   432→   432→payout_init 250ms 8s 5 45s 502,503,504,timeout
+   433→   433→provider_poll 1s 60s 12 15m any non-terminal
+   434→   434→webhook_out 5s 1h 14 24h non-2xx
+   435→   435→batch_job 30s 15m 8 6h transient only
+   436→   436→Full jitter, always Equal-jitter and no-jitter schedules synchronise retries across clients and produce a thundering
+   437→   437→herd precisely when a dependency is already struggling.
+   438→   438→Retry budget A client may spend at most 10% of its request volume on retries in any 60-second window.
+   439→   439→Exceeding the budget opens the circuit rather than amplifying load into a failing dependency.
+   440→   440→Never retry non-idempotent A money movement without an idempotency key is not retried under any circumstance. It is
+   441→   441→reconciled instead.
+   442→   442→Deadline propagation The remaining deadline travels in the request context. A retry that cannot complete within the
+   443→   443→deadline is not attempted — it would burn the dependency for a result nobody will read.
+   444→   444→6.2 Idempotency and deduplication
+   445→   445→Request level Idempotency-Key stored with a fingerprint of the canonicalised request body. Same key and
+   446→   446→same fingerprint replays the stored response; same key and different fingerprint returns 409.
+   447→   447→In-flight duplicates block on the original rather than racing it.
+   448→   448→Ledger level (tenant_id, source_event_id) is unique on ledger_entry. A double-posted event is
+   449→   449→rejected by the database, not by hopeful application logic.
+   450→   450→Payout level The provider-facing idempotency key is derived deterministically from offer_id, so a retry
+   451→   451→after an ambiguous timeout cannot produce a second payment even across a process restart.
+   452→   452→Event consumption Consumers write (consumer, event_id) to a processed-events table inside the same
+   453→   453→transaction as their side effect. Exactly-once effect from at-least-once delivery.
+   454→   454→Invoice level Global hash index catches the same receivable across tenants and across time, including after
+   455→   455→reformatting.
+   456→   456→Notification level Content hash plus a 10-minute window suppresses duplicate SMS and push, so a retry storm
+   457→   457→never becomes a message storm for the SME.
+   458→   458→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 14
+   459→   459→
+   460→   460→===== PAGE 15 =====
+   461→   461→6.3 Queues and asynchronous work
+   462→   462→topic partition key ordering DLQ consumers
+   463→   463→invoice.submitted tenant_id per tenant yes verify, fraud
+   464→   464→invoice.verified invoice_id per invoice yes pricing, notify
+   465→   465→decision.recorded tenant_id per tenant yes audit, analytics
+   466→   466→offer.accepted offer_id strict/offer yes funding
+   467→   467→ledger.posted txn_id strict/txn yes payout, recon
+   468→   468→payout.state_changed payout_id per payout yes notify, recon
+   469→   469→escrow.condition_met contract_id per contract yes release
+   470→   470→treasury.obligation_due tenant_id per tenant yes recall
+   471→   471→webhook.outbound subscription_id per subscriber yes dispatcher
+   472→   472→Transactional outbox everywhere. Events are written to an outbox table in the same transaction as the state
+   473→   473→change, then published by a relay. A state change without its event, or an event without its state change, is
+   474→   474→structurally impossible.
+   475→   475→Dead-letter discipline. Every topic has a DLQ. A DLQ that is non-empty for more than 15 minutes pages a
+   476→   476→human. DLQ messages are replayable individually or in bulk after a fix, with replay itself idempotent.
+   477→   477→Poison-message handling. Three consecutive failures on the same message routes it to the DLQ rather than
+   478→   478→blocking the partition. Partition-blocking is the most common cause of silent queue stalls and is designed out.
+   479→   479→Backpressure. Queue depth above threshold sheds load at the edge for low-priority work (analytics, non-critical
+   480→   480→notification) before any funding-path work is affected. Priority is declared per topic, not decided during an incident.
+   481→   481→Ordering honesty. Strict ordering only where it is genuinely required — per offer, per transaction, per contract.
+   482→   482→Everything else is explicitly unordered so consumers are written to tolerate it.
+   483→   483→6.4 Caching
+   484→   484→LAYER CONTENTS TTL INVALIDATION
+   485→   485→Edge CDN Static assets, fonts, icon sprite 1 year, content- Immutable; new hash on change
+   486→   486→hashed
+   487→   487→Client Rule-pack rate curve for local fee modelling Offer lifetime Discarded on offer expiry
+   488→   488→API response Projections, statements, portfolio reads 30–300 s ETag plus event-driven purge
+   489→   489→Feature cache Assembled feature snapshots for quoting 120 s Purged on any source event
+   490→   490→Rule pack Parsed, compiled active pack Until version change Pointer change broadcast to all
+   491→   491→instances
+   492→   492→Reference data Sector tables, instrument eligibility, holiday 1 hour Scheduled plus manual purge
+   493→   493→calendar
+   494→   494→Negative Known-absent lookups 10 s Short by design, to bound staleness
+   495→   495→cache
+   496→   496→Never cached: balances, limits at the moment of acceptance, consent state, KYB state, kill-switch state. These
+   497→   497→are read through to the primary every time, without exception.
+   498→   498→Stampede protection: single-flight per key plus probabilistic early expiry, so a popular key never produces a
+   499→   499→synchronised refresh across instances.
+   500→   500→Stale-while-revalidate for read-only analytics only, never for anything an SME acts on financially.
+   501→   501→Cache-key hygiene: tenant ID is part of every key. A key that could be shared across tenants fails the build.
+   502→   502→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 15
+   503→   503→
+   504→   504→===== PAGE 16 =====
+   505→   505→6.5 Error handling discipline
+   506→   506→"Try/catch" is a policy here, not a reflex. The rules are explicit because inconsistent error handling is how financial
+   507→   507→systems lose money quietly.
+   508→   508→Typed errors only Every catch block handles a declared error type. A bare catch-all is permitted exactly once per
+   509→   509→service, at the top-level request boundary, where it logs with the trace ID, increments a
+   510→   510→counter, and returns internal_error.
+   511→   511→Never swallow A caught error is either handled with a declared recovery, or rethrown with added context.
+   512→   512→Logging and continuing is prohibited on any path that touches money.
+   513→   513→Fail closed on money Ambiguity on the funding path resolves to not paying, then reconciling. Ambiguity on a read
+   514→   514→path resolves to showing last-known-good with a freshness indicator.
+   515→   515→Compensation, not rollback Distributed operations use explicit compensating transactions — reverse the ledger entry, void
+   516→   516→the reservation, release the escrow hold — written and tested as first-class code paths, not as
+   517→   517→cleanup scripts.
+   518→   518→Error context Every error carries tenant, subject reference, decision ID where applicable, and trace ID. An
+   519→   519→error without context is a defect raised in code review.
+   520→   520→Timeouts everywhere No network call, database query or lock acquisition is made without an explicit timeout. A
+   521→   521→missing timeout fails the build via lint rule.
+   522→   522→6.6 Circuit breakers and bulkheads
+   523→   523→breaker(dependency):
+   524→   524→closed → open when error_rate > 50% over 20 requests in 10s
+   525→   525→or p99 latency > 3x baseline for 30s
+   526→   526→open → half after 30s cooldown
+   527→   527→half → closed after 5 consecutive successes
+   528→   528→half → open on any failure
+   529→   529→bulkheads: dupay=40 conns aani=40 openfinance=20 einvoice=15
+   530→   530→custodian=10 notification=25 (per zone, independent pools)
+   531→   531→Each dependency has an isolated connection pool and concurrency limit, so an Open Finance provider degrading
+   532→   532→cannot exhaust the pool that payouts need. Breaker state is exposed on the status endpoint and drives the UI's
+   533→   533→degrade messaging directly, so what the SME sees is derived from reality rather than guessed.
+   534→   534→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 16
+   535→   535→
+   536→   536→===== PAGE 17 =====
+   537→   537→PART 7
+   538→   538→Edge cases
+   539→   539→The cases below are specified because they are the ones that produce either a loss or a
+   540→   540→furious SME. Each has a defined behaviour, not a best effort.
+   541→   541→INVOICE AND VERIFICATION
+   542→   542→Buyer amends after funding Original invoice is superseded, not edited. If the amount falls below the advance, the shortfall is
+   543→   543→recovered under the assignment terms disclosed at acceptance; the SME is notified before any
+   544→   544→recovery, never after.
+   545→   545→Credit note issued post-funding Netted against the receivable. If it exceeds the outstanding balance, the excess becomes a
+   546→   546→recoverable with a payment plan rather than an immediate demand.
+   547→   547→Partial payment by buyer Applied to the funded portion first. The remainder stays open; the invoice does not close until fully
+   548→   548→settled, and the SME sees both figures.
+   549→   549→Buyer pays the SME directly Detected by Open Finance inflow matching. SME is notified with a clear repayment instruction and
+   550→   550→a grace window before any fee. Repeat occurrences reduce the advance rate via the rule pack.
+   551→   551→Duplicate across tenants Both submissions freeze. Neither is auto-rejected. Routed to fraud review with both tenants notified
+   552→   552→that verification is in progress — never accused.
+   553→   553→Invoice currency not AED Rejected in Phase 1 with an explicit reason. FX is out of scope and the product says so rather than
+   554→   554→silently mishandling it.
+   555→   555→Due date in the past at Rejected as overdue with a reason, and routed to collection support rather than financing.
+   556→   556→submission
+   557→   557→Buyer entity dissolved Registry check at verification and re-check at settlement. Funding blocked; existing exposure
+   558→   558→moves to recovery with the SME informed immediately.
+   559→   559→PAYMENT AND SETTLEMENT
+   560→   560→Payout timeout, outcome Never retried blind. Status is polled using the deterministic idempotency key until terminal. The
+   561→   561→unknown SME sees "sending" with an honest expected time, not a false success.
+   562→   562→Payout succeeds, callback lost Reconciliation detects the orphan within the cycle and completes the state transition. The ledger is
+   563→   563→authoritative; the provider callback is a convenience.
+   564→   564→Destination account closed Payout fails cleanly, ledger entry is compensated, SME is prompted to update destination, and the
+   565→   565→offer is re-honoured at the original price for 48 hours.
+   566→   566→Aani unavailable Fallback to du Pay internal balance where destination permits. Otherwise the offer is held at the
+   567→   567→quoted price and auto-retried, with the SME told exactly what is happening.
+   568→   568→Duplicate payout detected Impossible by key construction. If one is ever observed, the funding kill switch engages
+   569→   569→automatically and the event pages immediately — treated as a sev-1 integrity breach.
+   570→   570→Weekend or holiday Aani settles 24/7, so there is no batch window. Obligation calendars still respect UAE public
+   571→   571→holidays for recall timing.
+   572→   572→Rounding Integer minor units throughout. Any residual fil is posted to a declared rounding account, reconciled
+   573→   573→daily, and never absorbed silently.
+   574→   574→LIMITS, PRICING AND CONSENT
+   575→   575→Pack changes between quote Acceptance re-validates. A changed price is shown explicitly and requires fresh acceptance. A price
+   576→   576→and accept never changes silently between the screen and the money.
+   577→   577→Limit drops mid-session Existing accepted offers are honoured. New quotes reflect the new limit with the reason stated —
+   578→   578→"two invoices moved past 30 days overdue" — rather than an unexplained reduction.
+   579→   579→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 17
+   580→   580→
+   581→   581→===== PAGE 18 =====
+   582→   582→Concurrent acceptance Serialised per tenant with a reservation held during funding. The second acceptance is rejected
+   583→   583→exceeding limit with limit_exceeded and the available headroom shown.
+   584→   584→Consent revoked mid- In-flight funding completes; no new decision is made. Dependent features disable within 60
+   585→   585→transaction seconds and derived features purge within 24 hours.
+   586→   586→Trade licence expires while New funding blocked at 30 days before expiry with escalating notice. Existing positions run to
+   587→   587→funded conclusion. No retroactive action is taken against a compliant business.
+   588→   588→Feature unavailable at quote Typed rejection with a reason. No default is substituted. A quote is never issued on incomplete
+   589→   589→time inputs.
+   590→   590→TREASURY
+   591→   591→Unforeseen large outflow after Emergency recall on the fastest instrument path, with the SME shown the exact arrival time. If the
+   592→   592→sweep arrival would be late, overdraft is never created — the shortfall is surfaced with options instead.
+   593→   593→Payroll date moves Calendar updates and recall re-plans immediately. Payroll detection uses a conservative window
+   594→   594→precisely because the date moves in practice.
+   595→   595→Instrument becomes illiquid Instrument is frozen for new sweeps, existing holdings are run to maturity, and the SME is notified
+   596→   596→with the maturity date. Eligibility is rule-pack data, so removal needs no deployment.
+   597→   597→Floor set above balance Valid state. Nothing is swept, no error is shown, and the SME is simply told no sweep is possible at
+   598→   598→the current floor.
+   599→   599→Forecast degrades for a tenant Safety margin widens automatically with forecast error, so a volatile business is swept more
+   600→   600→conservatively without any manual intervention.
+   601→   601→ESCROW
+   602→   602→Buyer never approves a met The declared review window expires and release proceeds under the time-based condition with
+   603→   603→milestone buyer veto. This is agreed at contract creation, which is what makes it enforceable and fair.
+   604→   604→Contract abandoned mid-way Unreleased funds return under declared termination terms. Full milestone history is exportable for
+   605→   605→any downstream proceeding.
+   606→   606→Partial milestone delivery Supported only where the contract declares divisible milestones at creation. Otherwise the
+   607→   607→milestone is binary, which prevents disputes about what "mostly done" means.
+   608→   608→Custodian unavailable at release Release is queued with the condition satisfaction timestamped at the moment it was met, not at the
+   609→   609→moment the instruction succeeded. The supplier is not penalised for infrastructure.
+   610→   610→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 18
+   611→   611→
+   612→   612→===== PAGE 19 =====
+   613→   613→PART 8
+   614→   614→Failsafe modes
+   615→   615→Five declared modes. Transitions are automatic on guardrail breach and manual by operator
+   616→   616→command. The current mode is published on the status endpoint and drives the interface
+   617→   617→directly.
+   618→   618→MODE TRIGGER BEHAVIOUR SME SEES
+   619→   619→M0 — All engines active, straight-through Full product.
+   620→   620→Normal processing at target.
+   621→   621→M1 Loss rate, dispute rate or forecast Advance rates reduced by a rule-pack Normal product with slightly lower
+   622→   622→Cautious error crosses a warning band; or a delta, new buyer relationships capped limits and an honest note
+   623→   623→dependency breaker is open. harder, manual review threshold lowered. explaining the temporary
+   624→   624→tightening.
+   625→   625→M2 Payout rail unavailable, or Quotes continue and are honoured at the "We can price this now and pay as
+   626→   626→Quote-only reconciliation break unresolved past quoted price. Acceptances queue. No soon as the rail is back" with a live
+   627→   627→threshold. money moves. status and the price locked.
+   628→   628→M3 Integrity breach, duplicate payout No new funding of any kind. Existing Clear suspension notice with
+   629→   629→Funding observed, portfolio ceiling breach, or positions, collections, escrow releases and expected review time. Existing
+   630→   630→suspended regulatory instruction. treasury recalls continue normally. money keeps working.
+   631→   631→M4 Primary datastore degraded, or zone Reads from replica with a freshness Balances and history with a visible
+   632→   632→Read-only failover in progress. indicator. All writes rejected with "as of" timestamp. No silent
+   633→   633→degraded. staleness.
+   634→   634→8.1 Kill switches
+   635→   635→Global funding Halts all new advances instantly. Two-person authorisation, effective in under 10 seconds, with full
+   636→   636→audit of who, when and why.
+   637→   637→Per engine Dynamic discounting, escrow and treasury are independently switchable. One engine's problem
+   638→   638→never takes down the others.
+   639→   639→Per tenant Suspends a single SME pending fraud or compliance review, with a mandatory stated reason
+   640→   640→recorded.
+   641→   641→Per buyer Stops financing a specific buyer's invoices on deterioration, without affecting any other relationship
+   642→   642→those suppliers hold.
+   643→   643→Per sector Rule-pack-level tightening or suspension by sector code, promotable in minutes.
+   644→   644→Per rail Diverts away from a degraded payment rail to a declared alternative.
+   645→   645→Automatic guardrails Loss rate, dispute rate, duplicate-payout detection, reconciliation break age and error-budget burn
+   646→   646→each trigger their declared switch without waiting for a human.
+   647→   647→Every switch is drilled. Monthly in staging, quarterly in production. A switch that has not been exercised in 90 days
+   648→   648→is treated as broken and flagged on the readiness dashboard.
+   649→   649→8.2 Degrade-to-manual
+   650→   650→When automation cannot proceed, work moves to a human queue inside the product rather than stopping. The
+   651→   651→operator console shows the decision record, the blocking rule, the full feature snapshot and the available actions, and
+   652→   652→every manual action is written to the same append-only audit store with the operator's identity attached. Manual
+   653→   653→handling is a declared mode of the system, not an absence of the system.
+   654→   654→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 19
+   655→   655→
+   656→   656→===== PAGE 20 =====
+   657→   657→PART 9
+   658→   658→Backtesting and model governance
+   659→   659→9.1 Shadow pricing
+   660→   660→Before any rule pack prices a real dirham it is evaluated against twelve months of du's historical invoice and payment
+   661→   661→data, producing for every historical invoice the limit and price the candidate pack would have set and the outcome
+   662→   662→that actually occurred.
+   663→   663→Outputs Approval rate by segment, price distribution, expected versus realised loss, concentration
+   664→   664→profile, and the count of decisions that would have changed versus the active pack.
+   665→   665→Acceptance A candidate must not increase modelled loss beyond the declared band, must not reduce
+   666→   666→approvals in any protected segment without a documented rationale, and must explain every
+   667→   667→outcome change by a named rule.
+   668→   668→Live shadow After historical shadow passes, the candidate runs in parallel on live traffic for 30 days,
+   669→   669→deciding nothing and recording everything.
+   670→   670→9.2 Forecast backtesting
+   671→   671→Method Walk-forward validation with an expanding window. No random splits — cash flow is a time
+   672→   672→series and random splits leak the future, which is the most common way a forecast looks good
+   673→   673→and performs badly.
+   674→   674→Horizons 7, 14, 30 and 90 days, each scored separately because they are used for different decisions.
+   675→   675→Metrics MAPE and weighted MAPE on inflow; pinball loss at the 10th, 50th and 90th percentiles, since
+   676→   676→the product uses the lower tail for the sweep decision; obligation-detection recall, where a miss
+   677→   677→is far costlier than a false positive.
+   678→   678→Segmented reporting By sector, size band and tenure. An aggregate number conceals exactly the segments where
+   679→   679→the model is unfit, so aggregate-only reporting is not accepted.
+   680→   680→Champion-challenger A challenger must beat the champion on the primary metric across at least four of five sectors
+   681→   681→and not regress materially on any, over two consecutive evaluation windows.
+   682→   682→9.3 Drift and monitoring
+   683→   683→Feature drift: population stability index on every input feature, weekly. PSI above 0.25 opens an investigation
+   684→   684→automatically.
+   685→   685→Calibration drift: realised against predicted, weekly, by segment. Sustained degradation widens the treasury
+   686→   686→safety margin automatically before anyone intervenes.
+   687→   687→Outcome drift: realised loss against modelled band, continuously. A breach triggers mode M1 without human
+   688→   688→delay.
+   689→   689→Fairness dispersion: approval and price distribution by sector, size and emirate each wave, with unexplained
+   690→   690→dispersion raised to the risk committee as a standing agenda item.
+   691→   691→Replay regression: nightly job replays a stratified sample of historical decisions against their recorded pack
+   692→   692→version and asserts byte-identical outcomes. Any divergence fails the build and blocks promotion.
+   693→   693→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 20
+   694→   694→
+   695→   695→===== PAGE 21 =====
+   696→   696→9.4 Model inventory
+   697→   697→MODEL USE DECISION AUTHORITY REVIEW
+   698→   698→Cash-flow forecast Projection, sweepable amount, safety margin Advisory. Feeds rules; decides nothing. Monthly
+   699→   699→Obligation detection Payroll, rent, VAT and recurring outflow Advisory, tuned for recall over precision Monthly
+   700→   700→calendar
+   701→   701→Buyer payment Buyer tier input to limits and pricing Advisory. The rule pack sets the cap. Quarterly
+   702→   702→behaviour
+   703→   703→Fraud anomaly score Routing to review, never auto-rejection Advisory. A human decides every fraud Monthly
+   704→   704→outcome.
+   705→   705→Collection risk rank Operational prioritisation only No customer-facing effect whatsoever Quarterly
+   706→   706→No model in the inventory has decision authority. That is the governance position, and it is enforced architecturally:
+   707→   707→ruleengine accepts model outputs only as named features inside a hashed snapshot, and cannot call a model.
+   708→   708→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 21
+   709→   709→
+   710→   710→===== PAGE 22 =====
+   711→   711→PART 10
+   712→   712→Security, privacy and compliance
+   713→   713→DOMAIN CONTROL
+   714→   714→Data residency All personal and financial data stored and processed in UAE regions. No cross-border transfer
+   715→   715→of SME financial data. Backups and disaster recovery remain in-country.
+   716→   716→Encryption TLS 1.3 in transit; AES-256 at rest with envelope encryption. Keys in a managed HSM-backed
+   717→   717→KMS, rotated annually, with separate keys per environment and no production key ever
+   718→   718→present in a lower environment.
+   719→   719→Field-level protection Bank account numbers, UBO identifiers and tax IDs encrypted at field level with a separate
+   720→   720→key and a separate access grant. Decryption is logged as a discrete audited event.
+   721→   721→Access control Least privilege, time-bound elevation with mandatory justification, two-person rule for kill
+   722→   722→switches, rule-pack promotion and any production data access. No standing production access
+   723→   723→for engineers.
+   724→   724→Audit Append-only store, write-once retention, legal hold, tamper-evident chaining. Covers every
+   725→   725→decision, every money movement, every consent change, every operator action and every
+   726→   726→data access.
+   727→   727→PDPL Purpose limitation enforced by the consent service at call time rather than by policy. Data-
+   728→   728→subject rights — access, correction, erasure where lawful, portability — served through self-
+   729→   729→service in-product.
+   730→   730→The commitment SME financial data is never sold and never used for marketing. Enforced by access control
+   731→   731→and audited, not merely stated in a policy document.
+   732→   732→AML and sanctions KYB with trade licence and establishment card, UBO screening, sanctions and PEP screening
+   733→   733→on SME and buyer, ongoing transaction monitoring, SAR filing through du's existing
+   734→   734→compliance function.
+   735→   735→Secure development SAST and dependency scanning on every commit, secret scanning with push protection,
+   736→   736→signed commits, SBOM per release, annual third-party penetration test with findings tracked to
+   737→   737→closure before the next release train.
+   738→   738→Incident response Severity matrix, 15-minute page for sev-1, documented communication tree including
+   739→   739→regulatory notification timelines, blameless post-incident review published internally within five
+   740→   740→working days.
+   741→   741→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 22
+   742→   742→
+   743→   743→===== PAGE 23 =====
+   744→   744→PART 11
+   745→   745→Design system
+   746→   746→WATERLINE is a financial instrument that lives inside someone else's app. It must feel native
+   747→   747→to du Business, trustworthy enough to move money through, and calm enough to use at 11pm
+   748→   748→when payroll is due on Thursday.
+   749→   749→11.1 Design principles
+   750→   750→Money is never decorative. Amounts are the largest, clearest element on any screen they appear on. Nothing
+   751→   751→competes with them.
+   752→   752→Show the arithmetic. Fees are shown as days early × rate × principal, in dirhams, before and after acceptance.
+   753→   753→Never a single opaque number.
+   754→   754→State before action. Every surface tells the SME where its money is before offering to move it.
+   755→   755→Calm by default, loud only when it matters. The accent colour is reserved for action and positive value. Red
+   756→   756→appears only for genuine failure, never for ordinary validation.
+   757→   757→Honest latency. Processing states show what is happening and what remains, with real progress where it exists
+   758→   758→and an honest indeterminate state where it does not.
+   759→   759→Arabic is a first-class language, not a translation layer. RTL is designed, not mirrored as an afterthought.
+   760→   760→11.2 Colour
+   761→   761→ink.900 ink.800 ink.600 ink.400 ink.200 ink.100
+   762→   762→#0B1420 #141C28 #3A4350 #767F8C #C7CCD4 #E8EBEF
+   763→   763→accent.500 primary accent.700 accent.900 accent.50 paper.warm paper.base
+   764→   764→#2783DE #1B5FA3 #0E3A69 #E8F2FB #FAF8F5 #FFFFFF
+   765→   765→success.500 caution.500 danger.500 escrow.500 treasury.500 neutral.mute
+   766→   766→#1E8E5A #B8860B #C23B22 #6B4FA8 #0F7F8C #8C867E
+   767→   767→Semantic mapping. accent is action and positive liquidity. success confirms settled money only — never a saved
+   768→   768→preference. caution marks attention needed, used for expiring licences and approaching obligations. danger is
+   769→   769→reserved for genuine failure and irreversible actions. escrow and treasury are engine identity colours used
+   770→   770→sparingly, for wayfinding only, never for emphasis.
+   771→   771→Dark mode is a full re-pairing, not an inversion: paper becomes #0B1420, surfaces step up through #141C28 and
+   772→   772→#1C2634, and accent.500 lightens to #4D9BE8 to hold contrast on dark. Every pair is verified at AA before release.
+   773→   773→11.3 Gradients
+   774→   774→liquidity.fill linear-gradient(180deg, #2783DE 0%, #1B5FA3 100%) — the only gradient
+   775→   775→permitted on a primary action. Used on the fund button and the liquidity gauge fill.
+   776→   776→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 23
+   777→   777→
+   778→   778→===== PAGE 24 =====
+   779→   779→surface.lift linear-gradient(180deg, #FFFFFF 0%, #FAF8F5 100%) — a 2% separation for
+   780→   780→elevated cards, replacing a heavy shadow.
+   781→   781→waterline.horizon linear-gradient(180deg, rgba(39,131,222,0.14) 0%, rgba(39,131,222,0)
+   782→   782→72%) — the signature motif behind the balance header, suggesting a level without drawing a
+   783→   783→chart.
+   784→   784→skeleton.shimmer linear-gradient(100deg, #E8EBEF 18%, #F3F5F8 32%, #E8EBEF 46%) animated
+   785→   785→1.4 s, a single pass, left to right and mirrored in RTL.
+   786→   786→escrow.lock linear-gradient(135deg, #6B4FA8 0%, #4A3579 100%) — escrow contract header
+   787→   787→only.
+   788→   788→Gradients never appear on text, never on more than one element in a viewport, and never exceed a 2-stop definition.
+   789→   789→A third stop is a design review failure.
+   790→   790→11.4 Typography
+   791→   791→Latin: Inter, with tnum and lnum enabled globally so digits align in every column. Arabic: IBM Plex Sans Arabic,
+   792→   792→selected for its structural match to Inter at shared optical sizes. Monospace: JetBrains Mono, used only for
+   793→   793→references, hashes and identifiers. System fallbacks are declared and tested, never assumed.
+   794→   794→AED 142,800
+   795→   795→display / 34px / 700 / -2.2%
+   796→   796→AED 42,000
+   797→   797→amount.lg / 28px / 700 / -1.8%
+   798→   798→Get paid today
+   799→   799→title / 20px / 700 / -1.2%
+   800→   800→heading / 17px / 600 / -0.6% Three invoices ready to fund
+   801→   801→body / 15px / 400 / 0 / 1.55 Your buyer confirmed this invoice on 12 October.
+   802→   802→body.strong / 15px / 600 Net proceeds AED 41,286
+   803→   803→caption / 13px / 400 Settles to du Pay ending 4471
+   804→   804→label / 11px / 700 / +14% / upper READY TO FUND
+   805→   805→mono / 13px / 400 dec_01J9Z4K2QX
+   806→   806→Scale is a 1.2 modular ratio snapped to 1px. Line length is capped at 68 characters for body copy. Amounts never
+   807→   807→wrap and never truncate — the container adapts, or the type steps down one level, but a figure is never shown
+   808→   808→partially.
+   809→   809→11.5 Grid, spacing, radius, elevation
+   810→   810→Spacing 4px base. Scale 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64. No arbitrary values; a non-scale value fails lint.
+   811→   811→Grid Mobile 4-column, 16px gutter, 20px margin. Tablet 8-column. Desktop 12-column, 24px gutter,
+   812→   812→1240px max content width.
+   813→   813→Radius sm 6px (inputs, chips) · md 10px (cards) · lg 16px (sheets, modals) · full (avatars, pills). Nothing is
+   814→   814→square except table cells and dividers.
+   815→   815→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 24
+   816→   816→
+   817→   817→===== PAGE 25 =====
+   818→   818→Elevation 0 flat · 1 0 1px 2px rgba(11,20,32,.06) cards · 2 0 4px 12px
+   819→   819→rgba(11,20,32,.08) popovers · 3 0 12px 32px rgba(11,20,32,.14) modals. Four
+   820→   820→levels only; a fifth is a sign the hierarchy is wrong.
+   821→   821→Borders 1px ink.100 default, ink.200 on hover, 2px accent.500 on focus. Focus is never
+   822→   822→removed, only restyled.
+   823→   823→11.6 Icons and glyphs
+   824→   824→Style Custom 24px grid, 1.75px stroke, round caps, round joins, 2px optical inset. Outline by default;
+   825→   825→filled variant only for the active navigation state.
+   826→   826→Core set invoice, invoice-verified, invoice-disputed, fund, escrow-lock, milestone, treasury-sweep, treasury-
+   827→   827→return, buyer, consent, audit-record, rule-pack, status-degraded, kill-switch.
+   828→   828→Signature glyphs The waterline — a horizontal rule with a 2px fill below, marking a level. Used for the balance
+   829→   829→header, the liquidity gauge and the empty state, and nowhere else. The gauge — a vertical
+   830→   830→measuring column showing available against total, the product's single most recognisable element.
+   831→   831→Currency AED is set in type, never as an icon, so it inherits tabular figures and aligns in columns.
+   832→   832→Status dots 8px, paired always with a text label. Colour alone never conveys state, for accessibility and for
+   833→   833→printing.
+   834→   834→Delivery Single SVG sprite, currentColor throughout, 1-year immutable cache keyed by content hash.
+   835→   835→No icon font.
+   836→   836→11.7 Navigation
+   837→   837→Entry WATERLINE is a tile inside du Business. It never competes with du's own navigation and never
+   838→   838→attempts to replace it.
+   839→   839→Mobile Four-tab bottom bar: Cash, Invoices, Escrow, Activity. Labels always visible — icon-only navigation
+   840→   840→fails users under stress, which is exactly when this product is used.
+   841→   841→Desktop Left rail, 240px, collapsible to 64px icons with persistent tooltips. Section state persists per user.
+   842→   842→Hierarchy Maximum two levels below a tab. A third level is a panel or a sheet, never a new navigation tier.
+   843→   843→Back and dismiss Every modal and sheet is dismissible by Escape, by backdrop tap and by an explicit control.
+   844→   844→Browser back closes the topmost layer rather than leaving the product.
+   845→   845→Deep links Every invoice, offer, contract and decision has a stable URL that survives authentication, so support
+   846→   846→can send an SME directly to the thing being discussed.
+   847→   847→Breadcrumbs Desktop only, from the second level down, with the current item unlinked.
+   848→   848→11.8 Widgets
+   849→   849→Liquidity gauge The signature widget. Vertical column showing available liquidity against total approved
+   850→   850→receivables, with the waterline marking the floor. Animates on value change over 420 ms with
+   851→   851→easing, never on mount.
+   852→   852→Cash runway strip Horizontal 90-day forward strip with obligation markers for payroll, rent and VAT. Tap a marker to
+   853→   853→see the detected obligation and its confidence.
+   854→   854→Invoice card Buyer, amount, due date, verification state, and a single primary action. Swipe on mobile for
+   855→   855→secondary actions; never more than one primary per card.
+   856→   856→Fee breakdown Always expanded, never behind a disclosure. Days early, rate per day, fee in dirhams, net
+   857→   857→proceeds, each on its own line.
+   858→   858→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 25
+   859→   859→
+   860→   860→===== PAGE 26 =====
+   861→   861→Date slider Settlement-date selector recomputing fee locally against the cached rate curve. Haptic detent at
+   862→   862→each day on mobile.
+   863→   863→Milestone tracker Vertical stepper with state per milestone, evidence links, approval actor and timestamp.
+   864→   864→Decision receipt Plain-language reason, rule-pack version, decision reference, and a copy control. Attached to every
+   865→   865→outcome including rejections.
+   866→   866→Status banner Rendered directly from the degrade-mode endpoint. The UI never guesses system state.
+   867→   867→11.9 Modals, panels and sheets
+   868→   868→Modal Blocking, for irreversible confirmation only: accept an offer, approve a milestone, revoke consent.
+   869→   869→Maximum 480px, focus trapped, Escape closes, primary action right in LTR and left in RTL.
+   870→   870→Sheet Mobile bottom sheet with two detents, 50% and 92%. Drag to dismiss with velocity threshold. Used
+   871→   871→for fee detail, buyer detail and filters.
+   872→   872→Side panel Desktop right panel, 420px, non-blocking so the list stays visible and navigable. Used for invoice
+   873→   873→detail and decision records.
+   874→   874→Popover Inline explanation anchored to a control, 280px max, dismissed on outside interaction. Used for
+   875→   875→"why this limit" and freshness indicators.
+   876→   876→Toast Non-blocking confirmation, 4 s, bottom-centre mobile and bottom-right desktop. Never used for
+   877→   877→errors that need action, and never for money movement, which gets a persistent record instead.
+   878→   878→Layer discipline One blocking layer at a time. A modal never opens from a modal; the second becomes a step
+   879→   879→inside the first.
+   880→   880→11.10 Loading states
+   881→   881→< 200 ms Nothing. A flash of a spinner is worse than a brief wait.
+   882→   882→200 ms – 1 s Skeleton matched to final layout within 4px, so content does not shift on arrival. Shimmer is a single
+   883→   883→pass, 1.4 s, mirrored in RTL.
+   884→   884→1 s – 10 s Skeleton plus a named stage: "Checking with your buyer", "Pricing your invoice". Never a bare
+   885→   885→"Loading".
+   886→   886→> 10 s Stepped progress with completed stages ticked and the current stage active, plus an honest
+   887→   887→expected time and the option to be notified rather than wait.
+   888→   888→Optimistic Permitted for preference changes only. Never for money. A payout never shows success before the
+   889→   889→ledger confirms it.
+   890→   890→Stale data Last-known-good is shown with a visible "as of" timestamp and a refresh control, rather than a
+   891→   891→blank screen.
+   892→   892→11.11 Error states and boundaries
+   893→   893→Inline field Below the field, danger.500, with the correction stated: "Enter the amount in AED, without
+   894→   894→decimals." Never "Invalid input."
+   895→   895→Form level Summary at the top listing each failed field as a focusable link, announced to assistive technology.
+   896→   896→Rule rejection Not styled as an error. It is a neutral outcome card with the plain-language reason and the specific
+   897→   897→path to becoming eligible.
+   898→   898→Transaction failure Full-width card with what happened, whether money moved, what happens next, and the trace
+   899→   899→reference. "Your money did not leave your account" is always stated explicitly when true.
+   900→   900→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 26
+   901→   901→
+   902→   902→===== PAGE 27 =====
+   903→   903→Degraded service Persistent banner derived from the status endpoint, naming the affected capability and what still
+   904→   904→works.
+   905→   905→Component boundary Every widget is wrapped. A failed widget renders a compact inline fallback with a retry control; the
+   906→   906→rest of the screen continues to work. One broken chart never blanks a dashboard.
+   907→   907→Route boundary Preserves navigation and offers return to Cash. The user is never stranded on a blank screen with
+   908→   908→no way out.
+   909→   909→Root boundary Branded failure page with a trace reference and a direct support path. Logged with full context
+   910→   910→before render.
+   911→   911→Offline Cached read-only view with an explicit offline indicator. Write actions are disabled with the reason
+   912→   912→given, never silently failing.
+   913→   913→11.12 Motion
+   914→   914→durations instant 90ms · quick 160ms · base 240ms · deliberate 420ms · slow 640ms
+   915→   915→easing standard cubic-bezier(.20,0,0,1) enter/exit
+   916→   916→decelerate cubic-bezier(0,0,0,1) incoming
+   917→   917→accelerate cubic-bezier(.30,0,1,1) outgoing
+   918→   918→spring stiffness 210, damping 26 gauge, sheets, drag
+   919→   919→reduced prefers-reduced-motion: all transforms → opacity-only crossfade 90ms,
+   920→   920→shimmer static, parallax disabled, gauge value snaps
+   921→   921→MICRO-INTERACTIONS
+   922→   922→Button press: scale 0.98, 90 ms, with haptic light impact on mobile.
+   923→   923→Toggle: 160 ms slide with a 1.06 overshoot on the knob only.
+   924→   924→Slider detent: 90 ms colour shift plus haptic selection tick per day.
+   925→   925→Field focus: 160 ms border colour and 2px ring, never a layout shift.
+   926→   926→Copy reference: glyph morphs to a tick for 1.2 s, then reverts.
+   927→   927→Amount change: digit roll on the changed digits only, 240 ms, tabular figures so nothing reflows.
+   928→   928→MACRO-CHOREOGRAPHY
+   929→   929→Funding confirmation: amount lifts 8px and scales to 1.04 (240 ms) → gauge fill rises to the new level (420 ms,
+   930→   930→spring) → receipt card enters from below (240 ms, decelerate) → success glyph draws its stroke over 320 ms.
+   931→   931→Total under 1.1 s, and the sequence is skippable by tapping.
+   932→   932→Sheet presentation: backdrop fades to 40% over 160 ms while the sheet rises with spring; content fades in 60
+   933→   933→ms after the sheet starts, so the container leads and the content follows.
+   934→   934→Route transition: 160 ms crossfade with a 12px directional offset. Forward moves with reading direction, back
+   935→   935→against it, mirrored under RTL.
+   936→   936→List reorder: FLIP technique, 240 ms, staggered 20 ms per row to a maximum of 8 rows, then simultaneous.
+   937→   937→SCROLL BEHAVIOUR
+   938→   938→Balance header collapses from 180px to a 56px sticky bar across the first 120px of scroll, with the amount scaling
+   939→   939→and the waterline gradient fading. Interpolated to scroll position, not triggered at a threshold, so it tracks the finger
+   940→   940→exactly.
+   941→   941→Section labels stick with a 1px rule that appears only once content passes beneath.
+   942→   942→Reveal on scroll is limited to 12px translate and opacity, triggered at 15% visibility, once per element per session.
+   943→   943→No long parallax, no pinned sections, no scroll-jacking — this is a financial tool, not a landing page.
+   944→   944→Lists are virtualised above 60 rows with scroll-position restoration on back navigation.
+   945→   945→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 27
+   946→   946→
+   947→   947→===== PAGE 28 =====
+   948→   948→Pull to refresh on mobile with a resistance curve and a haptic tick at the trigger point.
+   949→   949→11.13 Processing and money-in-motion
+   950→   950→The most trust-sensitive moment in the product is the gap between accepting an offer and seeing the money. It is
+   951→   951→designed explicitly rather than left to a spinner.
+   952→   952→Stage display Four named stages — Accepted, Reserved, Sent, Settled — each with a real timestamp as it
+   953→   953→completes. The SME always knows exactly where in the pipeline their money is.
+   954→   954→Honest indeterminate When the provider gives no progress signal, the stage shows elapsed time and the expected
+   955→   955→window rather than a fake progress bar. Fabricated progress is a trust failure.
+   956→   956→Ambiguous outcome Stage shows "Confirming with the bank" with a statement that no duplicate payment is possible,
+   957→   957→because the idempotency guarantee is the user's reassurance, not just an engineering property.
+   958→   958→Background completion The SME can leave. Push notification on terminal state, and the activity record is authoritative
+   959→   959→regardless of whether the app was open.
+   960→   960→Never a dead end Every processing state shows elapsed time, expected completion, and a support path with the
+   961→   961→trace reference pre-filled.
+   962→   962→11.14 Accessibility and localisation
+   963→   963→WCAG 2.2 AA throughout; AAA on amounts and all critical actions. Verified in CI with axe, and manually with
+   964→   964→VoiceOver and TalkBack each release.
+   965→   965→Minimum touch target 44×44px with 8px separation. Primary actions sit inside thumb reach on mobile.
+   966→   966→Full keyboard operation with a visible focus ring, logical tab order, and a skip link to main content.
+   967→   967→Screen-reader announcement of every state change: processing stage, outcome, error. Amounts announced as
+   968→   968→"forty-two thousand dirhams", not digit by digit.
+   969→   969→Arabic and RTL as a designed mirror: layout, icons with direction, progress and slider direction, with Eastern
+   970→   970→Arabic numerals as a user preference and Western as default.
+   971→   971→Text scales to 200% without loss of function. Amounts step type level rather than truncate.
+   972→   972→Colour never carries state alone — every status dot has a label, every chart series a pattern.
+   973→   973→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 28
+   974→   974→
+   975→   975→===== PAGE 29 =====
+   976→   976→PART 12
+   977→   977→Observability, testing and release
+   978→   978→12.1 Observability
+   979→   979→SLOs Funding path availability 99.9%. Quote p99 400 ms. Payout initiation p99 1.2 s. Acceptance-to-
+   980→   980→settled median under 5 minutes, p95 under 1 hour. Error budget burn reviewed weekly; a burn
+   981→   981→above 2× pauses feature releases automatically.
+   982→   982→Golden signals Per service: rate, errors, duration, saturation. Per business flow: quotes issued, offers accepted,
+   983→   983→payouts settled, straight-through rate, exception queue depth.
+   984→   984→Tracing 100% sampling on the funding path, 5% elsewhere. Every trace carries tenant, decision ID and
+   985→   985→rule-pack version as attributes, so any transaction is reconstructable end to end.
+   986→   986→Structured logs JSON, correlated by trace ID, with PII redacted at the logging library rather than by convention. A
+   987→   987→log line containing an unredacted account number fails the build.
+   988→   988→Alerting Symptom-based, never cause-based. Pages only on user-visible impact or integrity risk. Every alert
+   989→   989→has a runbook link; an alert without a runbook is deleted.
+   990→   990→Business dashboards Funded volume, loss rate, dispute rate, DSO delta, reconciliation breaks, forecast calibration,
+   991→   991→fairness dispersion — reviewed weekly with the du pilot team.
+   992→   992→12.2 Testing strategy
+   993→   993→Unit Rule pack evaluated against a golden fixture set per version. Every rule has a passing and a failing
+   994→   994→case plus boundary cases at each threshold.
+   995→   995→Property-based Ledger invariants — transactions always balance, balances never derive negative, idempotency
+   996→   996→always holds — asserted against generated inputs, not hand-picked examples.
+   997→   997→Replay regression Nightly replay of a stratified historical decision sample, asserting byte-identical outcomes against
+   998→   998→the recorded pack version. Any divergence blocks promotion.
+   999→   999→Contract Consumer-driven contracts for every external dependency, verified against recorded provider
+  1000→  1000→responses including every documented error shape.
+  1001→  1001→Integration Full funding path against provider sandboxes, including every failure injection: timeout, 500,
+  1002→  1002→duplicate callback, out-of-order callback, lost callback.
+  1003→  1003→End-to-end Playwright across the critical journeys on mobile and desktop, LTR and RTL, light and dark, plus
+  1004→  1004→the axe accessibility suite.
+  1005→  1005→Chaos Scheduled fault injection in staging: kill a zone, saturate a pool, delay a provider, corrupt a callback.
+  1006→  1006→Each exercise must demonstrate the declared degrade mode engaging correctly.
+  1007→  1007→Load 3× projected peak for the full 40,000-account base, sustained for one hour, with p99 budgets held
+  1008→  1008→and no queue growth.
+  1009→  1009→Operational drills Kill switches monthly, zone failover quarterly, reconciliation-break response quarterly, incident
+  1010→  1010→comms annually with du's communications team.
+  1011→  1011→12.3 Environments and release
+  1012→  1012→Four environments: local, integration (provider sandboxes), staging (production-shaped, synthetic data only),
+  1013→  1013→production. No production data ever enters a lower environment, including for debugging.
+  1014→  1014→Trunk-based development with short-lived branches. Every change behind a flag. Flags are inventoried with an
+  1015→  1015→owner and an expiry date; an expired flag fails the build.
+  1016→  1016→Progressive delivery: 1% → 5% → 25% → 100% with automatic rollback on SLO or guardrail breach at each
+  1017→  1017→step.
+  1018→  1018→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 29
+  1019→  1019→
+  1020→  1020→===== PAGE 30 =====
+  1021→  1021→Database migrations are expand-contract only, forward-compatible across one release, and never destructive in
+  1022→  1022→the same release as the code that stops using the column.
+  1023→  1023→Rule-pack releases are independent of code releases and roll back by pointer change in under 60 seconds.
+  1024→  1024→Every release is reproducible from a signed commit with an SBOM attached.
+  1025→  1025→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 30
+  1026→  1026→
+  1027→  1027→===== PAGE 31 =====
+  1028→  1028→PART 13
+  1029→  1029→Production readiness checklist
+  1030→  1030→No item is optional. Nothing ships to a funded wave with an unticked box, and the list is
+  1031→  1031→reviewed as a gate rather than as a reminder.
+  1032→  1032→CORRECTNESS AND MONEY
+  1033→  1033→Ledger balance Every transaction sums to zero, enforced by database constraint and asserted by property tests.
+  1034→  1034→No floats Integer minor units throughout; a lint rule fails any float in a monetary path.
+  1035→  1035→Idempotency Required and enforced on every money-moving endpoint; duplicate payout proven impossible under test.
+  1036→  1036→Reconciliation Daily to the dirham against provider statements, with automated break detection and same-day escalation.
+  1037→  1037→Rounding Residuals posted to a declared account and reconciled, never absorbed.
+  1038→  1038→Replay Historical decisions replay byte-identically against their recorded pack version.
+  1039→  1039→RESILIENCE
+  1040→  1040→Timeouts Explicit on every network call, query and lock; missing timeout fails the build.
+  1041→  1041→Backoff Full jitter on every retry class, with retry budgets enforced at the client.
+  1042→  1042→Breakers and bulkheads Configured per dependency with isolated pools; state exposed on the status endpoint.
+  1043→  1043→Outbox Every state change publishes its event transactionally; orphan detection runs continuously.
+  1044→  1044→DLQ Every topic has one, alerting at 15 minutes non-empty, with tested bulk replay.
+  1045→  1045→Degrade modes M0–M4 implemented, drilled, and driving the UI from the status endpoint.
+  1046→  1046→Kill switches All six scopes implemented, two-person authorised, exercised within the last 30 days.
+  1047→  1047→Failover Zone failover drilled within RTO, with results published internally.
+  1048→  1048→Load 3× full-base peak sustained one hour with budgets held.
+  1049→  1049→SECURITY AND COMPLIANCE
+  1050→  1050→Residency All data in UAE regions including backups; verified, not assumed.
+  1051→  1051→Encryption TLS 1.3, AES-256 at rest, field-level on sensitive identifiers, keys rotated.
+  1052→  1052→Access No standing production access; elevation time-bound and justified; two-person rule on sensitive operations.
+  1053→  1053→Audit Append-only, tamper-evident, covering decisions, movements, consent, operator actions and data access.
+  1054→  1054→Consent Enforced at call time; revocation propagates within 60 s and purges derived data within 24 h.
+  1055→  1055→Screening KYB, UBO, sanctions and PEP at onboarding and on change, with ongoing monitoring.
+  1056→  1056→Pen test Third-party test complete with all high and critical findings closed.
+  1057→  1057→Legal Assignment enforceability and product characterisation opinions obtained before Wave 1.
+  1058→  1058→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 31
+  1059→  1059→
+  1060→  1060→===== PAGE 32 =====
+  1061→  1061→EXPERIENCE
+  1062→  1062→Accessibility WCAG 2.2 AA verified in CI and manually with screen readers each release.
+  1063→  1063→RTL Arabic reviewed by a native speaker in product context, not in a spreadsheet.
+  1064→  1064→Reduced motion Honoured across every animation including the gauge and shimmer.
+  1065→  1065→Boundaries Component, route and root boundaries implemented with tested fallbacks.
+  1066→  1066→Offline Read-only cached view with explicit indicator; writes disabled with a stated reason.
+  1067→  1067→Copy review Every error and rejection reviewed for plain language and an actionable next step.
+  1068→  1068→OPERATIONS
+  1069→  1069→Runbooks One per alert; every alert without a runbook is deleted rather than tolerated.
+  1070→  1070→On-call Rota staffed with escalation path, 15-minute sev-1 page, and a tested paging channel.
+  1071→  1071→Exception queue Staffed with response-time commitment; SME notified proactively on every exception.
+  1072→  1072→Support tooling Agents can locate any transaction from a trace reference and see the full decision record.
+  1073→  1073→Status page Public degrade-mode status with incident history.
+  1074→  1074→Flag hygiene Every flag owned with an expiry; expired flags fail the build.
+  1075→  1075→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 32
+  1076→  1076→
+  1077→  1077→===== PAGE 33 =====
+  1078→  1078→PART 14
+  1079→  1079→Must-haves
+  1080→  1080→The three non-negotiables from the brief, mapped to the specific mechanism in this document
+  1081→  1081→that satisfies each.
+  1082→  1082→REQUIREMENT HOW IT IS MET WHERE
+  1083→  1083→Built for rapid scalability Stateless funding path, per-tenant hash partitioning with row-level security, Parts 2.2–
+  1084→  1084→separated hot/warm/cold paths, active-active across two UAE zones, 85% 2.4, 6,
+  1085→  1085→straight-through so operations scale sub-linearly. Proven by a 3× full-base load 12.2
+  1086→  1086→test and a drilled failover before the pilot concludes.
+  1087→  1087→100% digital integration Every lifecycle step digital end to end — UAE Pass identity, consent, verification, Parts 4,
+  1088→  1088→capability pricing, acceptance, payout, collection, reconciliation, dispute, reporting, 8.2, 11
+  1089→  1089→offboarding. Exceptions are handled by humans inside the same system with the
+  1090→  1090→same audit trail. No paper, no branch, no spreadsheet of truth.
+  1091→  1091→Scalable to 40,000+ SME Pilot and full base run the same binary, the same rule pack and the same audit Parts 2,
+  1092→  1092→customers store, differing only by feature flag and tenant count. There is no pilot build to 3.3, 12.3
+  1093→  1093→rewrite. Rails have headroom: Aani settles 24/7 and du Pay has transacted AED
+  1094→  1094→1.5bn+.
+  1095→  1095→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 33
+  1096→  1096→
+  1097→  1097→===== PAGE 34 =====
+  1098→  1098→PART 15
+  1099→  1099→Master build prompt
+  1100→  1100→Copy this prompt verbatim into a coding agent. It is written to be executed end to end without
+  1101→  1101→omission, and it refers back to this document for every specification it does not restate.
+  1102→  1102→HOW TO USE IT
+  1103→  1103→Supply this PRD alongside the prompt. The prompt instructs the agent to treat the PRD as binding and to stop
+  1104→  1104→rather than invent when a specification is genuinely absent. Execute phases in order; do not allow the agent to
+  1105→  1105→skip ahead to a later phase because an earlier one is "mostly done".
+  1106→  1106→ROLE
+  1107→  1107→You are a staff-level engineer building WATERLINE, a production financial
+  1108→  1108→system that moves real money for small businesses in the UAE. You are
+  1109→  1109→building it for du (EITC) under the Ignyte SME Challenge, Theme 2 —
+  1110→  1110→Creating Liquidity. Treat every instruction below as binding.
+  1111→  1111→MISSION
+  1112→  1112→Build the WATERLINE liquidity layer to production standard: dynamic
+  1113→  1113→discounting on buyer-approved receivables, milestone escrow via
+  1114→  1114→programmable mandate at a licensed custodian, and treasury autopilot
+  1115→  1115→sweeping idle cash into low-risk short-term instruments. It embeds in the
+  1116→  1116→du Business app, settles over du Pay and Aani, and must scale to 40,000+
+  1117→  1117→SME tenants without a rewrite.
+  1118→  1118→NON-NEGOTIABLES — violating any of these is a build failure
+  1119→  1119→1. No model decides who gets paid. A deterministic, versioned rule pack
+  1120→  1120→decides eligibility, limits and prices. ML produces named features
+  1121→  1121→inside a hashed snapshot and nothing else. ruleengine performs no I/O,
+  1122→  1122→reads no clock and uses no randomness.
+  1123→  1123→2. Every decision writes an append-only record BEFORE the outcome is
+  1124→  1124→shown: input hash, rulepack version, resolved parameters, outcome,
+  1125→  1125→binding rule, reason code, plain-language reason. If the write fails,
+  1126→  1126→the outcome is not shown.
+  1127→  1127→3. All money is integer minor units. No floating point touches a
+  1128→  1128→monetary path anywhere. Enforce with a lint rule that fails the build.
+  1129→  1129→4. Idempotency-Key is required on every money-moving endpoint. Duplicate
+  1130→  1130→payout must be structurally impossible, including across process
+  1131→  1131→restarts and ambiguous provider timeouts.
+  1132→  1132→5. Read-only on du BSS. No write path in any phase. Never in the rating
+  1133→  1133→or charging path. Total WATERLINE unavailability must have zero
+  1134→  1134→effect on du billing.
+  1135→  1135→6. The SME's treasury floor is absolute. No optimisation, yield
+  1136→  1136→opportunity or operator override may breach it. Enforce as a hard
+  1137→  1137→stop in ruleengine and make it the most heavily tested invariant in
+  1138→  1138→the system.
+  1139→  1139→7. Never fail silently on money. Ambiguity on the funding path resolves
+  1140→  1140→to not paying, then reconciling. Ambiguity on a read path resolves to
+  1141→  1141→last-known-good with a visible freshness indicator.
+  1142→  1142→8. Pilot and full base run the same binary, the same rule pack and the
+  1143→  1143→same audit store. Differences are feature flags and tenant count
+  1144→  1144→only. Do not build a pilot-only path.
+  1145→  1145→STACK
+  1146→  1146→TypeScript throughout. Node 22 services (Fastify), React 19 + Vite for
+  1147→  1147→the embedded SDK, React Native for mobile surfaces. Postgres 16 as system
+  1148→  1148→of record with row-level security. Redis for cache and single-flight.
+  1149→  1149→Kafka or equivalent for the event log. OpenTelemetry for traces, metrics
+  1150→  1150→and logs. Terraform for infrastructure, two UAE availability zones,
+  1151→  1151→active-active. If you must deviate, state the reason and the trade-off
+  1152→  1152→before writing code.
+  1153→  1153→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 34
+  1154→  1154→
+  1155→  1155→===== PAGE 35 =====
+  1156→  1156→BUILD ORDER — execute in sequence, do not skip, do not reorder
+  1157→  1157→PHASE 0 — Foundations
+  1158→  1158→* Monorepo, workspaces, strict tsconfig, lint rules including the
+  1159→  1159→no-float-in-money rule and the mandatory-timeout rule.
+  1160→  1160→* CI: typecheck, lint, unit, property, contract, e2e, axe, SBOM.
+  1161→  1161→* Postgres schema exactly as specified in PRD Part 2.5, including the
+  1162→  1162→balanced-transaction constraint, the global invoice_hash index, the
+  1163→  1163→insert-only grant on decision, and row-level security on every table.
+  1164→  1164→* Terraform for both zones, with synchronous replication for ledger and
+  1165→  1165→decision stores and asynchronous for everything else.
+  1166→  1166→ACCEPTANCE: a migration run produces an empty but complete schema; a
+  1167→  1167→query without tenant context returns zero rows; CI is green.
+  1168→  1168→PHASE 1 — Rule engine and decision service
+  1169→  1169→* ruleengine as a pure function: (featureSnapshot, rulePack) => Decision.
+  1170→  1170→No I/O, no clock, no randomness. Reject at the type level.
+  1171→  1171→* Rule pack loader with signature verification, version pinning and
+  1172→  1172→pointer-based activation. Prior versions remain loadable forever.
+  1173→  1173→* Canonical feature-snapshot serialisation and hashing.
+  1174→  1174→* decision service: assemble features, evaluate, persist record, emit
+  1175→  1175→event via transactional outbox.
+  1176→  1176→* Golden fixture suite: every rule with a passing case, a failing case
+  1177→  1177→and boundary cases at each threshold.
+  1178→  1178→* Replay endpoint and nightly replay regression job.
+  1179→  1179→ACCEPTANCE: replaying any stored input_hash against its recorded
+  1180→  1180→rulepack_version produces a byte-identical outcome, asserted in CI.
+  1181→  1181→PHASE 2 — Ledger and payout
+  1182→  1182→* Double-entry ledger. Balances derived, never stored as truth.
+  1183→  1183→Property tests for: transactions always balance, derived balances
+  1184→  1184→never negative, posting is idempotent on (tenant_id, source_event_id).
+  1185→  1185→* Transactional outbox and relay. Orphan detection for both
+  1186→  1186→directions: state change without event, event without state change.
+  1187→  1187→* payout service over du Pay and Aani with provider-facing idempotency
+  1188→  1188→keys derived deterministically from offer_id.
+  1189→  1189→* Retry policy exactly as PRD Part 6.1, including full jitter, retry
+  1190→  1190→budgets and deadline propagation. One central implementation; per-call
+  1191→  1191→overrides are forbidden.
+  1192→  1192→* Circuit breakers and per-dependency bulkheads as PRD Part 6.6.
+  1193→  1193→* Daily reconciliation against provider statements with automated break
+  1194→  1194→detection and same-day escalation. Rounding residuals to a declared
+  1195→  1195→account.
+  1196→  1196→ACCEPTANCE: inject timeout, 500, duplicate callback, out-of-order
+  1197→  1197→callback and lost callback; in every case the ledger is correct, no
+  1198→  1198→duplicate payment occurs, and reconciliation closes to zero.
+  1199→  1199→PHASE 3 — Invoice, consent, registry
+  1200→  1200→* Invoice state machine exactly as PRD Part 4.2 including canonical
+  1201→  1201→hashing, cross-tenant duplicate detection, and verification priority
+  1202→  1202→with per-route advance-rate caps.
+  1203→  1203→* Consent service with per-purpose scoped grants, call-time enforcement,
+  1204→  1204→60-second revocation propagation and 24-hour derived-data purge.
+  1205→  1205→* Registry: KYB, trade licence with expiry handling, UBO, buyer links
+  1206→  1206→with tier derivation.
+  1207→  1207→* Buyer confirmation portal: single-click confirm, bulk confirm, and an
+  1208→  1208→API callback route for anchor ERP systems.
+  1209→  1209→ACCEPTANCE: a deliberate duplicate submitted by a second tenant freezes
+  1210→  1210→both submissions and routes to review without auto-rejecting either;
+  1211→  1211→revoking consent disables dependent features within 60 seconds.
+  1212→  1212→PHASE 4 — Engines
+  1213→  1213→* Dynamic discounting: quote, offer, acceptance with server-side
+  1214→  1214→re-validation, reservation, funding, assignment, collection.
+  1215→  1215→A price change between quote and acceptance is surfaced explicitly
+  1216→  1216→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 35
+  1217→  1217→
+  1218→  1218→===== PAGE 36 =====
+  1219→  1219→and requires fresh acceptance. Never apply a changed price silently.
+  1220→  1220→* Milestone escrow: contract creation, the three condition types,
+  1221→  1221→custodian release instruction, dispute freeze on the disputed
+  1222→  1222→milestone only, termination with full history export.
+  1223→  1223→* Treasury autopilot: obligation calendar, sweepable amount
+  1224→  1224→(balance − floor − obligations(horizon) − safety_margin), instrument
+  1225→  1225→eligibility from rule-pack data, automatic recall with margin, and
+  1226→  1226→the absolute floor guarantee.
+  1227→  1227→ACCEPTANCE: every edge case in PRD Part 7 has a test that demonstrates
+  1228→  1228→the specified behaviour. Not a similar behaviour. The specified one.
+  1229→  1229→PHASE 5 — Degrade modes and kill switches
+  1230→  1230→* Modes M0–M4 exactly as PRD Part 8, with automatic transition on
+  1231→  1231→guardrail breach and manual operator transition.
+  1232→  1232→* All six kill-switch scopes with two-person authorisation and full
+  1233→  1233→audit, effective in under 10 seconds.
+  1234→  1234→* Status endpoint publishing current mode and breaker state; the UI
+  1235→  1235→reads system state from it and never guesses.
+  1236→  1236→* Degrade-to-manual: operator console showing the decision record, the
+  1237→  1237→blocking rule, the full feature snapshot and the available actions,
+  1238→  1238→with every manual action written to the same audit store.
+  1239→  1239→ACCEPTANCE: chaos exercises — kill a zone, saturate a pool, delay a
+  1240→  1240→provider, corrupt a callback — each demonstrably engage the correct
+  1241→  1241→declared mode, and the UI reflects it without code change.
+  1242→  1242→PHASE 6 — Experience
+  1243→  1243→* Implement the design system in PRD Part 11 completely: colour tokens
+  1244→  1244→including dark-mode re-pairing, the five permitted gradients, the
+  1245→  1245→type scale with tabular figures, the 4px spacing scale, the four
+  1246→  1246→elevation levels, the custom 24px icon grid, and both signature
+  1247→  1247→glyphs (the waterline rule and the vertical gauge).
+  1248→  1248→* Navigation, widgets, modals, sheets, side panels, popovers and toasts
+  1249→  1249→exactly as specified, including the one-blocking-layer rule.
+  1250→  1250→* Loading states by duration band: nothing under 200 ms, layout-matched
+  1251→  1251→skeletons to 1 s, named stages to 10 s, stepped progress beyond.
+  1252→  1252→Optimistic updates for preferences only, never for money.
+  1253→  1253→* Error states and all three boundary levels — component, route, root —
+  1254→  1254→with tested fallbacks. A rule rejection is a neutral outcome card,
+  1255→  1255→not an error.
+  1256→  1256→* Motion: the full duration and easing table, every micro-interaction,
+  1257→  1257→all four macro-choreographies, the scroll-linked balance header, and
+  1258→  1258→complete prefers-reduced-motion handling.
+  1259→  1259→* Processing states: four named stages with real timestamps, honest
+  1260→  1260→indeterminate display, explicit no-duplicate-payment reassurance on
+  1261→  1261→ambiguous outcomes, and background completion with push.
+  1262→  1262→* Accessibility: WCAG 2.2 AA with AAA on amounts and critical actions,
+  1263→  1263→full keyboard operation, screen-reader announcement of every state
+  1264→  1264→change, 200% text scaling.
+  1265→  1265→* Arabic and RTL as a designed mirror, with Eastern Arabic numerals as
+  1266→  1266→a user preference.
+  1267→  1267→ACCEPTANCE: axe passes with zero violations; VoiceOver and TalkBack
+  1268→  1268→complete the full funding journey; RTL reviewed in product context;
+  1269→  1269→reduced-motion verified on every animation including gauge and shimmer.
+  1270→  1270→PHASE 7 — Scale and hardening
+  1271→  1271→* Hot/warm/cold path separation verified: no hot-path request makes a
+  1272→  1272→synchronous external call, ever.
+  1273→  1273→* Caching exactly as PRD Part 6.4, including the never-cached list,
+  1274→  1274→single-flight, probabilistic early expiry and tenant-scoped keys.
+  1275→  1275→* Queues as PRD Part 6.3: declared partition keys, honest ordering
+  1276→  1276→guarantees, DLQs with 15-minute alerting and tested bulk replay,
+  1277→  1277→poison-message routing after three failures, declared backpressure
+  1278→  1278→priority.
+  1279→  1279→* Active-active completion with home-zone assignment per tenant so two
+  1280→  1280→zones never write the same ledger account concurrently.
+  1281→  1281→* Load test at 3x projected peak for 40,000 accounts, sustained one
+  1282→  1282→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 36
+  1283→  1283→
+  1284→  1284→===== PAGE 37 =====
+  1285→  1285→hour, p99 budgets held, no queue growth.
+  1286→  1286→* Zone failover drill inside RTO.
+  1287→  1287→ACCEPTANCE: PRD Part 13 production readiness checklist fully ticked,
+  1288→  1288→with evidence linked for every item.
+  1289→  1289→CODING STANDARDS
+  1290→  1290→* Typed errors only. One top-level catch-all per service, at the request
+  1291→  1291→boundary, which logs with trace ID, increments a counter and returns
+  1292→  1292→internal_error. Every other catch handles a declared type.
+  1293→  1293→* Never swallow an error. Handle with a declared recovery or rethrow with
+  1294→  1294→added context. Log-and-continue is forbidden on any money path.
+  1295→  1295→* Explicit timeout on every network call, query and lock acquisition.
+  1296→  1296→* Compensating transactions written and tested as first-class code paths,
+  1297→  1297→never as cleanup scripts.
+  1298→  1298→* Every error carries tenant, subject reference, decision ID where
+  1299→  1299→applicable, and trace ID.
+  1300→  1300→* PII redacted in the logging library, not by convention.
+  1301→  1301→* Expand-contract migrations only, forward-compatible across one release.
+  1302→  1302→* Every change behind a feature flag; every flag owned with an expiry.
+  1303→  1303→DEFINITION OF DONE — per phase, all of these
+  1304→  1304→[ ] Specified behaviour implemented, including every edge case named
+  1305→  1305→in the PRD for that area
+  1306→  1306→[ ] Unit, property and contract tests passing
+  1307→  1307→[ ] Failure injection demonstrating the declared degrade behaviour
+  1308→  1308→[ ] Observability: traces, metrics, structured logs, and an alert with
+  1309→  1309→a runbook for every user-visible failure mode
+  1310→  1310→[ ] Audit records written for every decision and money movement
+  1311→  1311→[ ] Accessibility verified where UI is involved
+  1312→  1312→[ ] Documentation updated: API reference, runbook, architecture note
+  1313→  1313→PROHIBITIONS
+  1314→  1314→* Do not add an unsecured lending product, consumer credit, FX, crypto
+  1315→  1315→custody or insurance. All are explicitly out of scope.
+  1316→  1316→* Do not let a model make or override a credit decision under any
+  1317→  1317→framing, including "advisory override" and "human in the loop with a
+  1318→  1318→default".
+  1319→  1319→* Do not write to du BSS. Do not enter the rating or charging path.
+  1320→  1320→* Do not cache balances, limits at acceptance, consent state, KYB state
+  1321→  1321→or kill-switch state.
+  1322→  1322→* Do not implement tokenised revenue in Phases 1 and 2. It is Phase 3,
+  1323→  1323→feature-flagged, pending CBUAE and VARA guidance.
+  1324→  1324→* Do not substitute a default for a missing feature. Reject with a typed
+  1325→  1325→reason code.
+  1326→  1326→* Do not show success for a money movement before the ledger confirms it.
+  1327→  1327→* Do not fabricate progress. An honest indeterminate state is required
+  1328→  1328→where the provider gives no progress signal.
+  1329→  1329→WHEN A SPECIFICATION IS GENUINELY ABSENT
+  1330→  1330→Stop and ask. Do not invent a credit policy, a fee, a limit, a retention
+  1331→  1331→period, a regulatory interpretation or a threshold. State precisely what
+  1332→  1332→is missing, why it blocks you, and the options you see. Inventing a
+  1333→  1333→number in a financial system is worse than stopping.
+  1334→  1334→OUTPUT FORMAT
+  1335→  1335→For each phase, produce in this order: (1) a short plan naming the files
+  1336→  1336→you will create or change; (2) the complete implementation, no
+  1337→  1337→placeholders, no "TODO", no abbreviated handlers; (3) the tests; (4) the
+  1338→  1338→acceptance evidence showing the phase's acceptance criteria met; (5) a
+  1339→  1339→list of anything you deliberately deferred and why. Then stop and wait
+  1340→  1340→before starting the next phase.
+  1341→  1341→WATERLINE — PRD, Design System & Master Build Specification · du SME Challenge, Theme 2 37
+  1342→  1342→
+  1343→  1343→

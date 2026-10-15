@@ -1,0 +1,495 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WATERLINE design system — PRD Part 11
+   Money is never decorative. Calm by default, loud only when it matters.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Ink (text + lines) ─────────────────────────────────────────────── */
+  --wl-ink-900: #0B1420;
+  --wl-ink-800: #141C28;
+  --wl-ink-600: #3A4350;
+  --wl-ink-400: #767F8C;
+  --wl-ink-200: #C7CCD4;
+  --wl-ink-100: #E8EBEF;
+
+  /* ── Accent: action and positive liquidity ───────────────────────────── */
+  --wl-accent-500: #2783DE;
+  --wl-accent-700: #1B5FA3;
+  --wl-accent-900: #0E3A69;
+  --wl-accent-50: #E8F2FB;
+
+  /* ── Paper ──────────────────────────────────────────────────────────── */
+  --wl-paper: #FFFFFF;
+  --wl-paper-warm: #FAF8F5;
+  --wl-surface-2: #F4F2EE;
+
+  /* ── Semantics ──────────────────────────────────────────────────────── */
+  --wl-success: #1E8E5A;
+  --wl-caution: #B8860B;
+  --wl-danger: #C23B22;
+  --wl-escrow: #6B4FA8;
+  --wl-treasury: #0F7F8C;
+  --wl-neutral-mute: #8C867E;
+
+  /* ── Elevation (exactly four levels) ────────────────────────────────── */
+  --wl-elev-1: 0 1px 2px rgba(11, 20, 32, 0.06);
+  --wl-elev-2: 0 4px 12px rgba(11, 20, 32, 0.08);
+  --wl-elev-3: 0 12px 32px rgba(11, 20, 32, 0.14);
+
+  /* ── Motion (PRD 11.12) ─────────────────────────────────────────────── */
+  --dur-instant: 90ms;
+  --dur-quick: 160ms;
+  --dur-base: 240ms;
+  --dur-deliberate: 420ms;
+  --dur-slow: 640ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --spring-gauge: cubic-bezier(0.34, 1.3, 0.5, 1);
+
+  /* ── shadcn mapping ─────────────────────────────────────────────────── */
+  --radius: 10px;
+  --background: var(--wl-paper);
+  --foreground: var(--wl-ink-900);
+  --card: var(--wl-paper);
+  --card-foreground: var(--wl-ink-900);
+  --popover: var(--wl-paper);
+  --popover-foreground: var(--wl-ink-900);
+  --primary: var(--wl-accent-500);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--wl-paper-warm);
+  --secondary-foreground: var(--wl-ink-900);
+  --muted: var(--wl-surface-2);
+  --muted-foreground: var(--wl-ink-400);
+  --accent: var(--wl-accent-50);
+  --accent-foreground: var(--wl-accent-900);
+  --destructive: var(--wl-danger);
+  --border: var(--wl-ink-100);
+  --input: var(--wl-ink-100);
+  --ring: var(--wl-accent-500);
+  --chart-1: var(--wl-accent-500);
+  --chart-2: var(--wl-treasury);
+  --chart-3: var(--wl-escrow);
+  --chart-4: var(--wl-caution);
+  --chart-5: var(--wl-success);
+  --sidebar: var(--wl-paper-warm);
+  --sidebar-foreground: var(--wl-ink-900);
+  --sidebar-primary: var(--wl-accent-500);
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: var(--wl-accent-50);
+  --sidebar-accent-foreground: var(--wl-accent-900);
+  --sidebar-border: var(--wl-ink-100);
+  --sidebar-ring: var(--wl-accent-500);
+}
+
+/* Dark mode is a full re-pairing, not an inversion (PRD 11.2) */
+.dark {
+  --wl-ink-900: #E8EBEF;
+  --wl-ink-800: #C7CCD4;
+  --wl-ink-600: #767F8C;
+  --wl-ink-400: #9AA3AF;
+  --wl-ink-200: #3A4350;
+  --wl-ink-100: #232D3B;
+
+  --wl-accent-500: #4D9BE8;
+  --wl-accent-700: #2783DE;
+  --wl-accent-900: #E8F2FB;
+  --wl-accent-50: #14293E;
+
+  --wl-paper: #0B1420;
+  --wl-paper-warm: #121B29;
+  --wl-surface-2: #1C2634;
+
+  --wl-success: #2FA36E;
+  --wl-caution: #D9A521;
+  --wl-danger: #E05A44;
+  --wl-escrow: #9B7FD0;
+  --wl-treasury: #3BA8B5;
+
+  --wl-elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --wl-elev-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --wl-elev-3: 0 12px 32px rgba(0, 0, 0, 0.6);
+
+  --background: var(--wl-paper);
+  --foreground: var(--wl-ink-900);
+  --card: #141C28;
+  --card-foreground: var(--wl-ink-900);
+  --popover: #141C28;
+  --popover-foreground: var(--wl-ink-900);
+  --primary: var(--wl-accent-500);
+  --primary-foreground: #0B1420;
+  --secondary: #1C2634;
+  --secondary-foreground: var(--wl-ink-900);
+  --muted: #1C2634;
+  --muted-foreground: var(--wl-ink-600);
+  --accent: var(--wl-accent-50);
+  --accent-foreground: var(--wl-accent-900);
+  --destructive: var(--wl-danger);
+  --border: #26303F;
+  --input: #26303F;
+  --ring: var(--wl-accent-500);
+  --sidebar: #0E1622;
+  --sidebar-foreground: var(--wl-ink-900);
+  --sidebar-primary: var(--wl-accent-500);
+  --sidebar-primary-foreground: #0B1420;
+  --sidebar-accent: var(--wl-accent-50);
+  --sidebar-accent-foreground: var(--wl-accent-900);
+  --sidebar-border: #1C2634;
+  --sidebar-ring: var(--wl-accent-500);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter), var(--font-plex-ar), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --font-arabic: var(--font-plex-ar), var(--font-inter), system-ui, sans-serif;
+
+  --color-ink-900: var(--wl-ink-900);
+  --color-ink-800: var(--wl-ink-800);
+  --color-ink-600: var(--wl-ink-600);
+  --color-ink-400: var(--wl-ink-400);
+  --color-ink-200: var(--wl-ink-200);
+  --color-ink-100: var(--wl-ink-100);
+
+  --color-accent-w: var(--wl-accent-500);
+  --color-accent-w-deep: var(--wl-accent-700);
+  --color-accent-w-dark: var(--wl-accent-900);
+  --color-accent-w-soft: var(--wl-accent-50);
+
+  --color-paper: var(--wl-paper);
+  --color-paper-warm: var(--wl-paper-warm);
+  --color-surface-2: var(--wl-surface-2);
+
+  --color-success-w: var(--wl-success);
+  --color-caution-w: var(--wl-caution);
+  --color-danger-w: var(--wl-danger);
+  --color-escrow-w: var(--wl-escrow);
+  --color-treasury-w: var(--wl-treasury);
+  --color-mute: var(--wl-neutral-mute);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 0px);
+  --radius-lg: calc(var(--radius) + 6px);
+  --radius-xl: calc(var(--radius) + 12px);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────── */
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), var(--font-plex-ar), system-ui, sans-serif;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+[dir="rtl"] body {
+  font-family: var(--font-plex-ar), var(--font-inter), system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--wl-accent-50);
+  color: var(--wl-accent-900);
+}
+
+/* Focus is never removed, only restyled (PRD 11.5) */
+:focus-visible {
+  outline: 2px solid var(--wl-accent-500);
+  outline-offset: 2px;
+}
+
+/* ── Type scale (PRD 11.4 — 1.2 modular ratio snapped to 1px) ──────────── */
+.type-display {
+  font-size: 34px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+.type-amount {
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+}
+.type-title {
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+.type-heading {
+  font-size: 17px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+.type-body {
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 400;
+}
+.type-body-strong {
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 600;
+}
+.type-caption {
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 400;
+}
+.type-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.type-mono {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 400;
+}
+.tnum {
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* Amounts never wrap and never truncate (PRD 11.4) */
+.money {
+  font-variant-numeric: tabular-nums lining-nums;
+  white-space: nowrap;
+}
+
+/* ── The five permitted gradients (PRD 11.3) ───────────────────────────── */
+.grad-liquidity {
+  background-image: linear-gradient(180deg, #2783de 0%, #1b5fa3 100%);
+}
+.dark .grad-liquidity {
+  background-image: linear-gradient(180deg, #4d9be8 0%, #1b5fa3 100%);
+}
+.grad-lift {
+  background-image: linear-gradient(180deg, var(--wl-paper) 0%, var(--wl-paper-warm) 100%);
+}
+.dark .grad-lift {
+  background-image: linear-gradient(180deg, #141c28 0%, #121b29 100%);
+}
+.grad-horizon {
+  background-image: linear-gradient(180deg, rgba(39, 131, 222, 0.14) 0%, rgba(39, 131, 222, 0) 72%);
+}
+.dark .grad-horizon {
+  background-image: linear-gradient(180deg, rgba(77, 155, 232, 0.12) 0%, rgba(77, 155, 232, 0) 72%);
+}
+.grad-escrow-lock {
+  background-image: linear-gradient(135deg, #6b4fa8 0%, #4a3579 100%);
+}
+.dark .grad-escrow-lock {
+  background-image: linear-gradient(135deg, #7d61b8 0%, #4a3579 100%);
+}
+
+/* Skeleton shimmer — single pass, 1.4s, mirrored in RTL (PRD 11.3) */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--wl-ink-100);
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(100deg, transparent 18%, rgba(255, 255, 255, 0.55) 32%, transparent 46%);
+  animation: wl-shimmer 1.4s ease-out forwards;
+}
+.dark .shimmer::after {
+  background: linear-gradient(100deg, transparent 18%, rgba(255, 255, 255, 0.07) 32%, transparent 46%);
+}
+[dir="rtl"] .shimmer::after {
+  animation-name: wl-shimmer-rtl;
+}
+@keyframes wl-shimmer {
+  100% { transform: translateX(100%); }
+}
+@keyframes wl-shimmer-rtl {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+/* ── Signature glyph: the waterline — a level, marked ──────────────────── */
+.waterline-rule {
+  position: relative;
+  height: 1px;
+  background: var(--wl-ink-200);
+}
+.waterline-rule::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1px;
+  height: 2px;
+  background: var(--wl-accent-500);
+  opacity: 0.85;
+}
+
+/* ── Elevation utilities ───────────────────────────────────────────────── */
+.elev-1 { box-shadow: var(--wl-elev-1); }
+.elev-2 { box-shadow: var(--wl-elev-2); }
+.elev-3 { box-shadow: var(--wl-elev-3); }
+
+/* ── Custom scrollbar (calm, ink) ──────────────────────────────────────── */
+.wl-scroll::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.wl-scroll::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.wl-scroll::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+  background: var(--wl-ink-200);
+  border-radius: 99px;
+}
+.wl-scroll::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+  background: var(--wl-ink-400);
+}
+.dark body::-webkit-scrollbar-thumb,
+.dark .wl-scroll::-webkit-scrollbar-thumb {
+  background: var(--wl-ink-600);
+}
+
+/* ── Reduced motion (PRD 11.12) ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .shimmer::after { display: none; }
+}
+
+/* ── Range input (date slider) styling ─────────────────────────────────── */
+input[type="range"].wl-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"].wl-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 99px;
+  background: var(--wl-ink-100);
+}
+input[type="range"].wl-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--wl-accent-500);
+  border: 3px solid var(--wl-paper);
+  box-shadow: var(--wl-elev-2);
+  transition: transform var(--dur-quick) var(--ease-standard);
+}
+input[type="range"].wl-slider:active::-webkit-slider-thumb {
+  transform: scale(1.08);
+}
+input[type="range"].wl-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 99px;
+  background: var(--wl-ink-100);
+}
+input[type="range"].wl-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--wl-accent-500);
+  border: 3px solid var(--wl-paper);
+  box-shadow: var(--wl-elev-2);
+}
+
+/* Digit-roll animation amount changes (PRD 11.12) */
+@keyframes wl-digit-roll {
+  0% { transform: translateY(70%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.digit-roll {
+  display: inline-block;
+  animation: wl-digit-roll var(--dur-base) var(--ease-decelerate);
+}
+
+/* Success glyph stroke draw (PRD 11.12) */
+@keyframes wl-stroke-draw {
+  from { stroke-dashoffset: 60; }
+  to { stroke-dashoffset: 0; }
+}
+.stroke-draw {
+  stroke-dasharray: 60;
+  animation: wl-stroke-draw 320ms var(--ease-standard) forwards;
+}
+
+/* Status dot pulse — paired always with a text label */
+@keyframes wl-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.dot-pulse {
+  animation: wl-dot-pulse 2.4s var(--ease-standard) infinite;
+}
+
+/* Button press: scale 0.98, 90ms */
+.press-scale {
+  transition: transform var(--dur-instant) var(--ease-standard);
+}
+.press-scale:active {
+  transform: scale(0.98);
+}
