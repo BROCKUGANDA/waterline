@@ -48,6 +48,7 @@ const ROUTES: RouteDescriptor[] = [
   { path: "/api/consents/{id}", method: "DELETE", purpose: "Revoke a consent", moneyMoving: false },
   { path: "/api/status", method: "GET", purpose: "Degrade mode M0–M4, kill switches, breakers — the UI never guesses", moneyMoving: false },
   { path: "/api/status", method: "POST", purpose: "Operator mode/switch changes (two-person, audited)", moneyMoving: false },
+  { path: "/api/ops/e07-drill", method: "POST", purpose: "Portfolio-ceiling drill — stages the E07 scenario via the canonical routes; unwind settles the drill-funded book", moneyMoving: true },
   { path: "/api/activity", method: "GET", purpose: "Activity feed with server-rendered copy", moneyMoving: false },
   { path: "/api/audit", method: "GET", purpose: "Ledger integrity, recent entries, rounding account", moneyMoving: false },
 ];

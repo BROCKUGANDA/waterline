@@ -20,6 +20,7 @@ import { rulePack, type RulePack } from "./rulepack";
 
 export const BASE_PACK_VERSION = rulePack.version;
 export const CAUTIOUS_PACK_VERSION = "2026.10.3-cautious.1";
+export const CANDIDATE_PACK_VERSION = "2026.11.0-rc1";
 
 /** The cautious pack — every changed field is listed here, with the reason.
  *  Anything not listed is byte-identical to the base pack. */
@@ -61,11 +62,47 @@ export const CAUTIOUS_DELTA_SUMMARY: { field: string; from: string; to: string; 
   { field: "Manual review threshold", from: "standard", to: "lowered", reason: "Ops reviews more approvals during the cautious window" },
 ];
 
+/** The CANDIDATE pack (PRD 3.3 promotion lifecycle, Author → Shadow phase):
+ * a proposed next-release change, evaluated in SHADOW against every live
+ * advance decision — the shadow row decides nothing, it only records what
+ * the candidate WOULD have decided on the exact same feature snapshot, so
+ * the outcome deltas are visible before any committee signs the promotion.
+ * Modest, plausible Q4 proposal:
+ *   - advance rate 90% → 88% (capital cost forecast),
+ *   - platinum buyer cap AED 120,000 → 110,000 (single-buyer concentration),
+ *   - platinum curve 2.6 → 2.5 bps/day (improved platinum funding cost).
+ * Pricing reprices ONLY the platinum curve — the change is deliberately
+ * small enough to review field-by-field. */
+export const CANDIDATE_PACK: RulePack = {
+  ...rulePack,
+  version: CANDIDATE_PACK_VERSION,
+  effectiveFrom: "2026-11-01T00:00:00Z",
+  limits: {
+    ...rulePack.limits,
+    baseAdvanceRatePermyriad: 8800,
+    buyerCapFils: { ...rulePack.limits.buyerCapFils, platinum: 11_000_000 },
+  },
+  pricing: {
+    ...rulePack.pricing,
+    baseCurveMilliBps: { ...rulePack.pricing.baseCurveMilliBps, platinum: 25 },
+  },
+};
+
+/** Human-readable candidate delta lines — published with the shadow diff so
+ *  the ops console states exactly what the proposal changes (never guessed). */
+export const CANDIDATE_DELTA_SUMMARY: { field: string; from: string; to: string; reason: string }[] = [
+  { field: "Advance rate (base)", from: "90%", to: "88%", reason: "Q4 capital cost forecast" },
+  { field: "Platinum buyer cap", from: "AED 120,000", to: "AED 110,000", reason: "Single-buyer concentration tightening" },
+  { field: "Platinum curve", from: "2.6 bps/day", to: "2.5 bps/day", reason: "Improved platinum funding cost" },
+  { field: "Every other field", from: "unchanged", to: "unchanged", reason: "The proposal is deliberately small — review field-by-field" },
+];
+
 /** Version → pack. Unknown versions return null — callers must surface the
  *  drift honestly, never silently fall back to a different pack. */
 export const PACK_REGISTRY: Record<string, RulePack> = {
   [BASE_PACK_VERSION]: rulePack,
   [CAUTIOUS_PACK_VERSION]: CAUTIOUS_PACK,
+  [CANDIDATE_PACK_VERSION]: CANDIDATE_PACK,
 };
 
 /** The pack that decides advance offers right now. Only M1 selects the

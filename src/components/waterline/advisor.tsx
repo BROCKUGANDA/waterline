@@ -293,11 +293,11 @@ export function AdvisorPanel() {
             </div>
             {thread.length > 0 && (
               <div className="flex justify-between items-center mt-1.5">
-                <span className="type-label text-ink-400">{question.length}/500</span>
+                <span className="type-label text-ink-600">{question.length}/500</span>
                 <button
                   type="button"
                   onClick={() => { setThread([]); setError(null); }}
-                  className="type-label text-ink-400 hover:text-danger-w press-scale"
+                  className="type-label text-ink-600 hover:text-danger-w press-scale"
                 >
                   {T.advisor.clear}
                 </button>

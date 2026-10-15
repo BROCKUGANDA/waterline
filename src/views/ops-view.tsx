@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { useStatus, useOperatorStatus, useDecisions, useReplayDecision, useAudit, useConsents, useRevokeConsent, useGrantConsent, useInvoices, useDisputeDrill } from "@/hooks/waterline";
+import { useStatus, useOperatorStatus, useDecisions, useReplayDecision, useAudit, useConsents, useRevokeConsent, useGrantConsent, useInvoices, useDisputeDrill, useE07Drill, type E07DrillResult } from "@/hooks/waterline";
 import { Money } from "@/components/waterline/money";
 import { SectionLabel, StatusDot, SkeletonCard, CopyRef } from "@/components/waterline/primitives";
 import { WlIcon } from "@/components/waterline/icons";
@@ -240,8 +240,112 @@ function StatusTab() {
         <div className="type-caption text-ink-400 mt-1.5">{T.ops.operatorActions}</div>
       </div>
 
-      {/* guardrail watch + dispute drill */}
+      {/* guardrail watch + dispute drill + E07 portfolio drill */}
       <GuardrailWatch reason={reason} />
+    </div>
+  );
+}
+
+/* ── E07 portfolio-ceiling drill (one click stages the honest scenario) ── */
+function E07DrillCard({ reason }: { reason: string }) {
+  const T = t(useUi((s) => s.lang));
+  const lang = useUi((s) => s.lang);
+  const openInvoice = useUi((s) => s.openInvoice);
+  const drill = useE07Drill();
+  const [result, setResult] = useState<E07DrillResult | null>(null);
+
+  const aed = (fils: number) => (lang === "ar" ? formatAedAr(fils) : formatAed(fils));
+
+  const run = (action: "stage" | "unwind") => {
+    if (!reason || reason.trim().length < 3) {
+      toast.error(T.ops.confirmTwoPerson);
+      return;
+    }
+    drill.mutate(
+      { action, reason },
+      {
+        onSuccess: (res) => {
+          setResult(res);
+          if (action === "unwind") {
+            toast.success(T.ops.e07.unwindToast, { duration: 6000 });
+          } else if (res.alreadyStaged) {
+            toast.info(T.ops.e07.alreadyToast, { duration: 6000 });
+          } else {
+            toast.success(T.ops.e07.stagedToast, { duration: 6000 });
+          }
+        },
+        onError: (e) => toast.error(e instanceof Error ? e.message : T.errors.generic),
+      },
+    );
+  };
+
+  return (
+    <div className="rounded-[10px] border border-border bg-card p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <div>
+          <SectionLabel>{T.ops.e07.title}</SectionLabel>
+          <div className="type-caption text-ink-400 mt-0.5">{T.ops.e07.subtitle}</div>
+        </div>
+        <WlIcon name="invoice" size={16} className="text-ink-400 shrink-0" />
+      </div>
+      <div className="mt-3 flex flex-col sm:flex-row gap-2">
+        <button
+          type="button"
+          onClick={() => run("stage")}
+          disabled={drill.isPending}
+          className={cn(
+            "h-10 px-4 rounded-md type-caption font-semibold press-scale border shrink-0",
+            "bg-card border-border hover:border-caution-w/50 hover:text-caution-w",
+            "disabled:opacity-50 disabled:pointer-events-none"
+          )}
+        >
+          {drill.isPending && drill.variables?.action === "stage" ? T.ops.e07.staging : T.ops.e07.stage}
+        </button>
+        <button
+          type="button"
+          onClick={() => run("unwind")}
+          disabled={drill.isPending}
+          className={cn(
+            "h-10 px-4 rounded-md type-caption font-semibold press-scale border shrink-0",
+            "bg-card border-border hover:border-success-w/50 hover:text-success-w",
+            "disabled:opacity-50 disabled:pointer-events-none"
+          )}
+        >
+          {drill.isPending && drill.variables?.action === "unwind" ? T.ops.e07.unwinding : T.ops.e07.unwind}
+        </button>
+      </div>
+      {result && (
+        <div className={cn("mt-3 rounded-md border px-3 py-2.5", result.crossed ? "border-caution-w/50 bg-caution-w/10" : "border-border bg-surface-2/50")}>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="type-caption text-ink-400">{T.ops.e07.exposure}</div>
+              <div className="type-body-strong money">{aed(result.exposureFils)}</div>
+            </div>
+            <div>
+              <div className="type-caption text-ink-400">{T.ops.e07.ceiling}</div>
+              <div className="type-body-strong money">{aed(result.ceilingFils)}</div>
+            </div>
+          </div>
+          <div className={cn("type-caption mt-2 font-semibold", result.crossed ? "text-caution-w-dark" : "text-ink-600")}>
+            {result.crossed ? T.ops.e07.crossed : T.ops.e07.notCrossed}
+          </div>
+          {result.acceptedCount > 0 && (
+            <div className="type-caption text-ink-400 mt-1">
+              {result.acceptedCount} {T.ops.e07.funded}
+            </div>
+          )}
+          {result.drillInvoice && (
+            <button
+              type="button"
+              onClick={() => openInvoice(result.drillInvoice!.id)}
+              className="mt-2 h-8 px-3 rounded-md border border-accent-w/40 text-accent-w type-caption font-semibold press-scale hover:bg-accent-w-soft/50"
+              title={T.ops.e07.openHint}
+            >
+              {T.ops.e07.openInvoice} · {result.drillInvoice.ref} · {aed(result.drillInvoice.grossFils)}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -275,15 +379,17 @@ function GuardrailWatch({ reason }: { reason: string }) {
       const aed = lang === "ar" ? formatAedAr(Math.abs(m.value)) : formatAed(Math.abs(m.value));
       return m.value >= 0 ? T.ops.guardrails.aboveFloor(aed) : T.ops.guardrails.belowFloor(aed);
     }
+    if (m.key === "railBreaker") return m.value >= 1 ? T.ops.guardrails.railOpen : T.ops.guardrails.railClosed;
     return String(m.value);
   };
   const fmtBand = (m: NonNullable<StatusDto["guardrails"]>["metrics"][number]): string =>
-    m.unit === "permyriad" ? `${(m.band / 100).toFixed(0)}%` : m.unit === "fils" ? "≥ 0" : "0";
+    m.unit === "permyriad" ? `${(m.band / 100).toFixed(0)}%` : m.unit === "fils" ? "≥ 0" : m.key === "railBreaker" ? T.ops.guardrails.bandClosed : "0";
 
   const metricLabel = (key: string): string =>
     key === "disputeRate" ? T.ops.guardrails.disputeRate
     : key === "lossRate" ? T.ops.guardrails.lossRate
     : key === "coverage30d" ? T.ops.guardrails.coverage30d
+    : key === "railBreaker" ? T.ops.guardrails.railBreaker
     : T.ops.guardrails.reconBreaks;
 
   const runDrill = () => {
@@ -351,11 +457,14 @@ function GuardrailWatch({ reason }: { reason: string }) {
                 <div className="flex items-start gap-2">
                   <WlIcon name="alert" size={14} className="text-caution-w shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <div className="type-caption text-caution-w-dark font-bold">{T.ops.guardrails.breached} — {T.ops.guardrails.autoApplied}</div>
-                    {g.lastAutoEpisode && status?.mode === "M1" && (
+                    <div className="type-caption text-caution-w-dark font-bold">
+                      {T.ops.guardrails.breached} —{" "}
+                      {g.lastAutoMode === "M2" ? T.ops.guardrails.autoAppliedM2 : T.ops.guardrails.autoAppliedM1}
+                    </div>
+                    {g.lastAutoEpisode && g.lastAutoMode === status?.mode && (
                       <div className="type-caption text-ink-600 mt-0.5" dir="auto">{g.autoReason}</div>
                     )}
-                    {status?.mode !== "M1" && (
+                    {g.lastAutoMode !== status?.mode && (
                       <div className="type-caption text-ink-600 mt-0.5">{T.ops.guardrails.manualOverride}</div>
                     )}
                   </div>
@@ -414,6 +523,8 @@ function GuardrailWatch({ reason }: { reason: string }) {
           </div>
         )}
       </div>
+
+      <E07DrillCard reason={reason} />
     </>
   );
 }
@@ -498,12 +609,86 @@ function DecisionRow({ d }: { d: DecisionDto }) {
 
 function DecisionsTab() {
   const T = t(useUi((s) => s.lang));
+  const lang = useUi((s) => s.lang);
   const { data, isLoading } = useDecisions();
   const [filter, setFilter] = useState<string>("all");
   const decisions = (data?.decisions ?? []).filter((d) => filter === "all" || d.outcome === filter);
+  const sd = data?.shadowDiff;
+  const aed = (fils: number | null) =>
+    fils === null ? "—" : lang === "ar" ? formatAedAr(fils) : formatAed(fils);
 
   return (
     <div className="space-y-3">
+      {/* Shadow pack (PRD 3.3 promotion lifecycle, phase 2) — the candidate
+          scores every live decision in parallel; this panel is the review. */}
+      {sd && (
+        <div className="rounded-[10px] border border-border bg-card p-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <div>
+              <SectionLabel>{T.ops.shadowPack.title}</SectionLabel>
+              <div className="type-caption text-ink-400 mt-0.5">{T.ops.shadowPack.subtitle}</div>
+            </div>
+            <span className="type-mono text-[11px] text-ink-400 shrink-0">{sd.candidateVersion}</span>
+          </div>
+          <div className="mt-3 rounded-md border border-border bg-surface-2/50 p-3">
+            <div className="type-caption text-ink-400 font-semibold">{T.ops.shadowPack.deltaTitle}</div>
+            <div className="mt-1.5 space-y-1">
+              {sd.delta.map((d) => (
+                <div key={d.field} className="flex items-baseline justify-between gap-2 type-caption">
+                  <span className="text-ink-600 min-w-0">{d.field}</span>
+                  <span className="type-mono text-[11px] whitespace-nowrap">
+                    <span className="text-ink-400">{d.from}</span>
+                    <span className="text-ink-400 mx-1">→</span>
+                    <span className="text-accent-w-dark font-semibold">{d.to}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {sd.shadowPairs === 0 ? (
+            <div className="type-caption text-ink-400 mt-3">{T.ops.shadowPack.noData}</div>
+          ) : (
+            <>
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+                  <div className="type-caption text-ink-400">{T.ops.shadowPack.pairs}</div>
+                  <div className="type-body-strong">{sd.shadowPairs}</div>
+                </div>
+                <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+                  <div className="type-caption text-ink-400">{T.ops.shadowPack.approvalsGained}</div>
+                  <div className={cn("type-body-strong", sd.approvalsGained > 0 && "text-success-w-dark")}>{sd.approvalsGained}</div>
+                </div>
+                <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+                  <div className="type-caption text-ink-400">{T.ops.shadowPack.approvalsLost}</div>
+                  <div className={cn("type-body-strong", sd.approvalsLost > 0 && "text-danger-w")}>{sd.approvalsLost}</div>
+                </div>
+                <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+                  <div className="type-caption text-ink-400">{T.ops.shadowPack.limitMoves}</div>
+                  <div className={cn("type-body-strong", sd.limitMoves > 0 && "text-accent-w-dark")}>{sd.limitMoves}</div>
+                </div>
+                <div className="rounded-md border border-border bg-surface-2/50 p-2.5">
+                  <div className="type-caption text-ink-400">{T.ops.shadowPack.priceMoves}</div>
+                  <div className={cn("type-body-strong", sd.priceMoves > 0 && "text-accent-w-dark")}>{sd.priceMoves}</div>
+                </div>
+              </div>
+              {sd.examples.length > 0 && (
+                <div className="mt-2 space-y-0.5">
+                  {sd.examples.map((ex, i) => (
+                    <div key={i} className="type-caption text-ink-600 truncate" dir="auto">
+                      {T.ops.shadowPack.example(
+                        ex.label,
+                        `${ex.liveOutcome} ${aed(ex.liveLimitFils)}`,
+                        `${ex.shadowOutcome} ${aed(ex.shadowLimitFils)}`,
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="type-caption text-ink-400 mt-2" dir="auto">{sd.note}</div>
+            </>
+          )}
+        </div>
+      )}
       <div className="flex gap-1.5">
         {["all", "approved", "capped", "rejected"].map((f) => (
           <button

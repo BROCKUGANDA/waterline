@@ -54,35 +54,48 @@ export async function POST(req: Request): Promise<Response> {
     const encoder = new TextEncoder();
     const mode = status?.mode ?? "M0";
 
-    // The SDK yields the RAW SSE wire bytes as Uint8Array chunks (each may
-    // carry several `data:` lines). We decode, parse every line and re-emit
-    // each content delta as our own SSE event — the client watches the
-    // explanation arrive instead of staring at a spinner.
+    // The SDK yields the RAW SSE wire bytes as Uint8Array chunks. Chunk
+    // boundaries do NOT align with `data:` line boundaries — a line (or a
+    // multi-byte UTF-8 character) can be split across two chunks. So: ONE
+    // stateful TextDecoder ({stream:true} keeps split characters intact) plus
+    // a line buffer that carries the partial tail across chunks. Re-emit each
+    // content delta as our own SSE event — nothing is ever dropped silently.
     const body = new ReadableStream<Uint8Array>({
       async start(controller) {
         const send = (obj: Record<string, unknown>) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
         };
+        const decoder = new TextDecoder();
+        let lineBuffer = "";
         let answer = "";
+
+        const processLine = (line: string) => {
+          if (!line.startsWith("data:")) return;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === "[DONE]") return;
+          try {
+            const j = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] };
+            const delta = j?.choices?.[0]?.delta?.content;
+            if (delta) {
+              answer += delta;
+              send({ delta });
+            }
+          } catch {
+            // A malformed line never breaks the stream.
+          }
+        };
+
         try {
           for await (const raw of stream as AsyncIterable<Uint8Array>) {
-            const text = new TextDecoder().decode(raw);
-            for (const line of text.split("\n")) {
-              if (!line.startsWith("data:")) continue;
-              const payload = line.slice(5).trim();
-              if (!payload || payload === "[DONE]") continue;
-              try {
-                const j = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] };
-                const delta = j?.choices?.[0]?.delta?.content;
-                if (delta) {
-                  answer += delta;
-                  send({ delta });
-                }
-              } catch {
-                // A malformed line never breaks the stream.
-              }
-            }
+            lineBuffer += decoder.decode(raw, { stream: true });
+            const lines = lineBuffer.split("\n");
+            lineBuffer = lines.pop() ?? ""; // the partial tail waits for more bytes
+            for (const line of lines) processLine(line);
           }
+          // Flush: the decoder's held bytes + the final buffered line.
+          lineBuffer += decoder.decode();
+          if (lineBuffer) processLine(lineBuffer);
+
           const trimmed = answer.trim();
           if (!trimmed) {
             send({ error: "advisor_empty", detail: "The advisor returned an empty answer — try rephrasing." });

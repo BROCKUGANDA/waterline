@@ -125,6 +125,44 @@ export function useDisputeDrill() {
   });
 }
 
+/** E07 portfolio-ceiling drill (ops console): stage the honest demo — fund
+ *  the book under the cautious pack, submit an invoice that crosses the
+ *  tightened ceiling, then quote it to see E_PORTFOLIO. Unwind settles the
+ *  drill-funded book (the recovery arc: headroom returns, the quote passes). */
+export interface E07DrillResult {
+  action: string;
+  staged: boolean;
+  alreadyStaged: boolean;
+  mode: string;
+  exposureFils: number;
+  ceilingFils: number;
+  crossed: boolean;
+  acceptedCount: number;
+  settledCount?: number;
+  remainingFundedCount?: number;
+  drillInvoice?: { id: string; ref: string; grossFils: number };
+  note: string;
+}
+
+export function useE07Drill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { action: "stage" | "unwind"; reason: string }) =>
+      api.post<E07DrillResult>("/api/ops/e07-drill", vars, {
+        idemScope: `e07drill:${vars.action}:${Date.now()}`,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["invoice"] });
+      qc.invalidateQueries({ queryKey: ["overview"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["status"] });
+      qc.invalidateQueries({ queryKey: ["audit"] });
+      qc.invalidateQueries({ queryKey: ["treasury"] });
+    },
+  });
+}
+
 export function useSubmitInvoice() {
   const qc = useQueryClient();
   return useMutation({
@@ -259,7 +297,24 @@ export function useActivity(limit = 50) {
 }
 
 export function useDecisions() {
-  return useQuery({ queryKey: ["decisions"], queryFn: () => api.get<{ decisions: DecisionDto[] }>("/api/decisions") });
+  return useQuery({
+    queryKey: ["decisions"],
+    queryFn: () =>
+      api.get<{
+        decisions: DecisionDto[];
+        shadowDiff?: {
+          candidateVersion: string;
+          delta: { field: string; from: string; to: string; reason: string }[];
+          shadowPairs: number;
+          approvalsGained: number;
+          approvalsLost: number;
+          limitMoves: number;
+          priceMoves: number;
+          examples: { label: string; liveOutcome: string; liveLimitFils: number | null; shadowOutcome: string; shadowLimitFils: number | null }[];
+          note: string;
+        };
+      }>("/api/decisions"),
+  });
 }
 
 export function useReplayDecision() {

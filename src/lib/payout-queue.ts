@@ -196,6 +196,36 @@ function providerRefFor(payoutId: string): string {
   return `dpay_${payoutId.slice(-6)}`;
 }
 
+/** Delivery completion (posted exactly once, idempotent on its source
+ *  event `payout.settled:{payoutId}`, P2002-tolerant): the moment a payout
+ *  settles — whether the honest pipeline crosses the boundary OR the
+ *  invoice-settle endpoint resolves the payout early — the advance is
+ *  delivered to the SME's du Pay wallet. The wallet the UI calls "Available
+ *  now" must move when money actually arrives. The funding txn credited the
+ *  pool with the net at accept; delivery debits it back and credits the
+ *  wallet. Net effect on the pool: zero. Double-entry stays balanced.
+ *  Shared by advancePayoutPipeline and the invoice settle route so the
+ *  shortcut can never strand the advance in the funding pool. */
+export async function postDeliveryCompletion(p: Payout): Promise<void> {
+  try {
+    await postTransaction({
+      tenantId: p.tenantId,
+      txnId: `txn_${shortId("d")}`,
+      sourceEventId: `payout.settled:${p.id}`,
+      valueDate: new Date(),
+      entries: [
+        { accountCode: LEDGER_ACCOUNTS.FUNDING_POOL, direction: "debit", amountFils: p.amountFils, memo: `Advance delivered — ${p.destinationRef}` },
+        { accountCode: LEDGER_ACCOUNTS.SME_WALLET(p.tenantId), direction: "credit", amountFils: p.amountFils, memo: `Early payment received — ${p.destinationRef}` },
+      ],
+      eventType: "payout.settled",
+      eventSubjectRef: p.id,
+      eventPayload: { amountFils: p.amountFils, providerRef: p.providerRef ?? providerRefFor(p.id) },
+    });
+  } catch (e) {
+    if ((e as { code?: string }).code !== "P2002") throw e; // duplicate → already delivered
+  }
+}
+
 /** Advance the pipeline to the stage elapsed honest time dictates, persist
  *  newly-crossed boundaries and write the outbox events. Returns the FRESH
  *  payout row (the input row is never mutated by reference). */
@@ -238,30 +268,11 @@ export async function advancePayoutPipeline(p: Payout): Promise<Payout> {
     }
     data.state = STAGE_KEYS[target];
 
-    // Delivery completion (posted exactly once, idempotent on its source
-    // event): the moment the payout SETTLES, the advance is delivered to the
-    // SME's du Pay wallet — the wallet the UI calls "Available now" must
-    // move when money actually arrives. The funding txn credited the pool
-    // with the net at accept; delivery debits it back and credits the
-    // wallet. Net effect on the pool: zero. Double-entry stays balanced.
+    // Delivery completion (idempotent, single source of truth in
+    // postDeliveryCompletion): the moment the payout SETTLES the advance is
+    // delivered to the SME's du Pay wallet. See the shared function doc.
     if (target >= 3) {
-      try {
-        await postTransaction({
-          tenantId: p.tenantId,
-          txnId: `txn_${shortId("d")}`,
-          sourceEventId: `payout.settled:${p.id}`,
-          valueDate: new Date(),
-          entries: [
-            { accountCode: LEDGER_ACCOUNTS.FUNDING_POOL, direction: "debit", amountFils: p.amountFils, memo: `Advance delivered — ${p.destinationRef}` },
-            { accountCode: LEDGER_ACCOUNTS.SME_WALLET(p.tenantId), direction: "credit", amountFils: p.amountFils, memo: `Early payment received — ${p.destinationRef}` },
-          ],
-          eventType: "payout.settled",
-          eventSubjectRef: p.id,
-          eventPayload: { amountFils: p.amountFils, providerRef: p.providerRef ?? providerRefFor(p.id) },
-        });
-      } catch (e) {
-        if ((e as { code?: string }).code !== "P2002") throw e; // duplicate → already delivered
-      }
+      await postDeliveryCompletion(p);
     }
 
     await db.payout.update({ where: { id: p.id }, data });

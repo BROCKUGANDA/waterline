@@ -196,13 +196,17 @@ export function renderActivityEventAr(ev: ActivityEventDto): EventCopy {
     }
     case "guardrail.triggered": {
       const unit = str("unit") ?? "permyriad";
-      const fmt = (v: number | null) =>
-        v === null ? null : unit === "permyriad" ? `٪${(v / 100).toFixed(0)}` : unit === "fils" ? formatAedAr(v) : String(v);
-      const valueLabel = fmt(num("value"));
-      const bandLabel = fmt(num("band"));
+      const isRail = str("guardrail") === "railBreaker";
+      const fmtValue = (v: number | null) =>
+        v === null ? null : unit === "permyriad" ? `٪${(v / 100).toFixed(0)}` : unit === "fils" ? formatAedAr(v) : isRail ? (v >= 1 ? "مفتوح" : "مغلق") : String(v);
+      const valueLabel = fmtValue(num("value"));
+      const bandLabel = unit === "permyriad" ? `٪${((num("band") ?? 0) / 100) | 0}` : unit === "fils" ? "≥ ٠" : isRail ? "مغلق" : "٠";
+      const m2 = str("mode") === "M2";
       return {
         title: "عُبِر حاجز وقائي",
-        detail: `${str("guardrail") ?? "حاجز وقائي"} تجاوز نطاق التحذير (${valueLabel ?? "—"} مقابل ${bandLabel ?? "—"}) — طُبّق الوضع الحذر M1 آلياً؛ تُشدَّد الحدود والسعر لا يتغير.`,
+        detail: m2
+          ? `${str("guardrail") ?? "حاجز وقائي"} تجاوز نطاق التحذير (${valueLabel ?? "—"} مقابل ${bandLabel ?? "—"}) — طُبّق الوضع M2 آلياً؛ تُحترم العروض بالسعر المقفل وتنتظر القبولات في الطابور ولا تتحرك أي أموال.`
+          : `${str("guardrail") ?? "حاجز وقائي"} تجاوز نطاق التحذير (${valueLabel ?? "—"} مقابل ${bandLabel ?? "—"}) — طُبّق الوضع الحذر M1 آلياً؛ تُشدَّد الحدود والسعر لا يتغير.`,
       };
     }
     case "invoice.dispute_resolved":

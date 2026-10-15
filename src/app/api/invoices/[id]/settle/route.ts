@@ -1,10 +1,13 @@
 // WATERLINE — POST /api/invoices/[id]/settle (Task 2-a).
 // Demo buyer settlement: the buyer pays the gross at due date. Only for
-// fundingState=accepted. Posts two balanced transactions via postTransaction:
+// fundingState=accepted. Posts balanced transactions via postTransaction:
 //   1. collection  — BANK_COLLECTIONS debit gross / RECEIVABLE_CONTROL credit gross
 //                    (sourceEventId `invoice.settled:{id}`)
 //   2. reserve release — RESERVE_HELD debit reserve / SME_WALLET credit reserve
 //                    (sourceEventId `reserve.release:{id}`)
+//   3. delivery completion — FUNDING_POOL debit net / SME_WALLET credit net
+//                    (sourceEventId `payout.settled:{payoutId}`, idempotent —
+//                    a no-op when the honest pipeline already delivered)
 // Invoice.fundingState → settled; the payout resolves to settled+reconciled.
 // Money-moving POST: Idempotency-Key header REQUIRED (contract rule 1).
 // Ledger-level idempotency: (tenant, sourceEventId) unique — a repeat settle is
@@ -14,6 +17,7 @@ import { db } from "@/lib/db";
 import { ok, errors, problem, requireIdempotencyKey, DEMO_TENANT } from "@/lib/api";
 import { ensureSeed } from "@/lib/seed";
 import { postTransaction, LEDGER_ACCOUNTS } from "@/lib/ledger";
+import { postDeliveryCompletion } from "@/lib/payout-queue";
 import { shortId } from "@/lib/canonical";
 import type { BuyerLink, Invoice, Payout } from "@prisma/client";
 
@@ -159,22 +163,33 @@ export async function POST(
     }
 
     // 3) State: invoice settled; payout resolves to settled + reconciled.
+    //    The delivery completion posts BEFORE the payout row flips to
+    //    settled — idempotent on `payout.settled:{payoutId}`, so when the
+    //    honest pipeline already delivered (UI flow: pipeline completes,
+    //    then the buyer settles) this is a P2002 no-op. When the settle
+    //    shortcut resolves a mid-pipeline payout (API flow: accept then
+    //    settle within the pipeline window), the SME's advance is delivered
+    //    here exactly once instead of being stranded in the funding pool —
+    //    and advancePayoutPipeline can never re-post it later (observed
+    //    stage is already settled), so the delivery is never duplicated.
     const updatedInvoice = await db.invoice.update({
       where: { id: invoice.id },
       data: { fundingState: "settled" },
       include: { buyerLink: true },
     });
     const payoutRow = await db.payout.findFirst({ where: { offerId: offer.id } });
-    let updatedPayout = payoutRow
-      ? await db.payout.update({
-          where: { id: payoutRow.id },
-          data: {
-            state: "settled",
-            settledAt: payoutRow.settledAt ?? now,
-            reconciledAt: payoutRow.reconciledAt ?? now,
-          },
-        })
-      : null;
+    let updatedPayout = payoutRow;
+    if (payoutRow && payoutRow.state !== "queued") {
+      await postDeliveryCompletion(payoutRow);
+      updatedPayout = await db.payout.update({
+        where: { id: payoutRow.id },
+        data: {
+          state: "settled",
+          settledAt: payoutRow.settledAt ?? now,
+          reconciledAt: payoutRow.reconciledAt ?? now,
+        },
+      });
+    }
 
     return ok({
       invoice: serializeInvoice(updatedInvoice),

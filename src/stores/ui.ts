@@ -25,6 +25,8 @@ interface UiState {
   setAdvisorSeed: (seed: string | null) => void;
   /** Deep-link helper: seed a question and open the sheet in one action. */
   askAdvisor: (seed: string) => void;
+  /** Deep-link helper: jump to the Invoices view with an invoice selected. */
+  openInvoice: (id: string) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -46,6 +48,7 @@ export const useUi = create<UiState>()(
       setAdvisorOpen: (advisorOpen) => set({ advisorOpen }),
       setAdvisorSeed: (advisorSeed) => set({ advisorSeed }),
       askAdvisor: (seed) => set({ advisorSeed: seed, advisorOpen: true }),
+      openInvoice: (id) => set({ view: "invoices", selectedInvoiceId: id, quoteInvoiceId: null }),
     }),
     {
       name: "waterline-ui",

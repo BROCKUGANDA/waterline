@@ -2,22 +2,29 @@
 // "Transitions are automatic on guardrail breach and manual by operator
 //  command." The telemetry below is DETERMINISTIC — every value is derived
 //  from the append-only stores with fixed arithmetic, evaluated on the
-//  status heartbeat. Automation only ever escalates M0 → M1 (limits tighten,
-//  nothing reprices); recovery is a human decision, and a human revert
-//  within the same breach episode is a deliberate override that stands.
+//  status heartbeat. Automation only ever escalates FROM M0, and the target
+//  mode follows the published mode catalog (never a guess):
+//   - M1 (cautious — limits tighten, nothing reprices) for the loss/dispute/
+//     forecast guardrails;
+//   - M2 (quote-only — quotes honoured at the locked price, acceptances
+//     queue, no money moves) for the payout-rail breaker and reconciliation
+//     breaks, exactly the two conditions the M2 catalog entry declares.
+//  Recovery is a human decision, and a human revert within the same breach
+//  episode is a deliberate override that stands.
 //
 //  Metrics (warning bands are fixed, published data — never model output):
 //   1. disputeRate   — disputed ÷ (verified + disputed) invoices, permyriad.
-//                      Band: ≥ 20% (2000‱).
+//                      Band: ≥ 20% (2000‱) → M1.
 //   2. lossRate      — failed ÷ (failed + settled) payouts, permyriad.
-//                      Band: ≥ 20% (2000‱).
+//                      Band: ≥ 20% (2000‱) → M1.
 //   3. coverage30d   — (wallet + recallable sweeps) − obligations due in the
 //                      next 30 days vs the ABSOLUTE floor. Warning when the
-//                      projected 30-day position would sit below the floor.
-//   4. reconBreaks   — ledger transactions that do not sum to zero. Band: ≥ 1.
+//                      projected 30-day position would sit below the floor → M1.
+//   4. reconBreaks   — ledger transactions that do not sum to zero. Band: ≥ 1 → M2.
+//   5. railBreaker   — the du Pay payout-rail breaker state. Band: open → M2.
 //
 //  Episode semantics: the episode key is the sorted set of breached guardrail
-//  keys. Auto-M1 fires once per distinct episode; the operator's revert
+//  keys. Auto-escalation fires once per distinct episode; the operator's revert
 //  within the episode is final until the breach set changes.
 
 import { db } from "@/lib/db";
@@ -26,7 +33,13 @@ import { accountBalance, verifyLedgerIntegrity, LEDGER_ACCOUNTS } from "@/lib/le
 
 const DAY = 86_400_000;
 
-export type GuardrailKey = "disputeRate" | "lossRate" | "coverage30d" | "reconBreaks";
+export type GuardrailKey = "disputeRate" | "lossRate" | "coverage30d" | "reconBreaks" | "railBreaker";
+
+/** Which escalate-mode each metric drives, per the published mode catalog.
+ * A rail-class breach always wins: if payouts cannot dispatch safely the
+ * platform quotes only, regardless of any concurrent M1-class crossing. */
+export const M1_GUARDRAIL_KEYS: readonly GuardrailKey[] = ["disputeRate", "lossRate", "coverage30d"];
+export const M2_GUARDRAIL_KEYS: readonly GuardrailKey[] = ["reconBreaks", "railBreaker"];
 
 export interface GuardrailMetric {
   key: GuardrailKey;
@@ -49,10 +62,11 @@ export interface GuardrailsEval {
 /** Fixed warning bands — published data, identical in every pack version
  *  (they watch the platform, not the pricing). */
 export const GUARDRAIL_BANDS: Record<GuardrailKey, { band: number; unit: GuardrailMetric["unit"] }> = {
-  disputeRate: { band: 2_000, unit: "permyriad" }, // ≥ 20%
-  lossRate: { band: 2_000, unit: "permyriad" }, // ≥ 20%
-  coverage30d: { band: 0, unit: "fils" }, // projected position < floor
-  reconBreaks: { band: 1, unit: "count" }, // any break
+  disputeRate: { band: 2_000, unit: "permyriad" }, // ≥ 20% → M1
+  lossRate: { band: 2_000, unit: "permyriad" }, // ≥ 20% → M1
+  coverage30d: { band: 0, unit: "fils" }, // projected position < floor → M1
+  reconBreaks: { band: 1, unit: "count" }, // any break → M2
+  railBreaker: { band: 1, unit: "count" }, // du Pay breaker open → M2
 };
 
 /** Pure telemetry read — deterministic, no writes. */
@@ -98,6 +112,21 @@ export async function evaluateGuardrailTelemetry(): Promise<GuardrailsEval> {
   // 4. Reconciliation breaks — the ledger must always sum to zero.
   const recon = await verifyLedgerIntegrity(DEMO_TENANT);
 
+  // 5. Payout-rail breaker — the du Pay breaker open means payouts cannot
+  //    dispatch: exactly the M2 catalog condition ("payout rail unavailable").
+  //    Read from the published breaker state, never guessed.
+  const stBreakers = await db.statusState.findUnique({
+    where: { id: "singleton" },
+    select: { breakersJson: true },
+  });
+  let dupayOpen = false;
+  try {
+    const parsed = stBreakers?.breakersJson ? (JSON.parse(stBreakers.breakersJson) as Record<string, string>) : null;
+    dupayOpen = parsed?.dupay === "open";
+  } catch {
+    dupayOpen = false;
+  }
+
   const metrics: GuardrailMetric[] = [
     {
       key: "disputeRate",
@@ -131,6 +160,16 @@ export async function evaluateGuardrailTelemetry(): Promise<GuardrailsEval> {
       breached: recon.breaks.length >= GUARDRAIL_BANDS.reconBreaks.band,
       detail: `${recon.txns} ledger transactions checked.`,
     },
+    {
+      key: "railBreaker",
+      value: dupayOpen ? 1 : 0,
+      band: GUARDRAIL_BANDS.railBreaker.band,
+      unit: "count",
+      breached: dupayOpen,
+      detail: dupayOpen
+        ? "du Pay payout rail breaker is open — payouts cannot dispatch."
+        : "du Pay payout rail breaker is closed.",
+    },
   ];
 
   const breachedKeys = metrics.filter((m) => m.breached).map((m) => m.key);
@@ -143,14 +182,19 @@ export async function evaluateGuardrailTelemetry(): Promise<GuardrailsEval> {
 
 export interface GuardrailEnforcementResult {
   evaluation: GuardrailsEval;
-  /** True when THIS call auto-applied M1 (once per episode). */
+  /** True when THIS call auto-applied the escalation (once per episode). */
   autoApplied: boolean;
   /** The auto-transition reason, for the ops panel and audit trail. */
   autoReason: string | null;
+  /** The mode this escalation applied ("M1" | "M2" | null). */
+  autoMode: "M1" | "M2" | null;
 }
 
-/** The automatic side of PRD Part 8: escalate M0 → M1 when a guardrail is
- *  breached, once per distinct breach episode. Never called inside another
+/** The automatic side of PRD Part 8: escalate M0 when a guardrail warning
+ *  band is crossed — to M1 (cautious pack) for loss/dispute/forecast
+ *  guardrails, or to M2 (quote-only) when the payout rail breaker is open or
+ *  a reconciliation break is unresolved, exactly the catalog conditions for
+ *  each mode. Once per distinct breach episode; never called inside another
  *  write transaction; failures are swallowed by the caller (the status
  *  endpoint must never fail). */
 export async function enforceGuardrails(): Promise<GuardrailEnforcementResult> {
@@ -168,14 +212,14 @@ export async function enforceGuardrails(): Promise<GuardrailEnforcementResult> {
     } catch {
       // Bookkeeping only — never let it fail the status read.
     }
-    return { evaluation, autoApplied: false, autoReason: null };
+    return { evaluation, autoApplied: false, autoReason: null, autoMode: null };
   }
 
   const st = await db.statusState.findUnique({ where: { id: "singleton" } });
   // Automation only escalates FROM M0. Any other mode (an operator's M2/M3/M4
   // or an existing M1) already reflects a human or prior escalation.
   if (!st || st.mode !== "M0") {
-    return { evaluation, autoApplied: false, autoReason: null };
+    return { evaluation, autoApplied: false, autoReason: null, autoMode: null };
   }
 
   let lastEpisode: string | null = null;
@@ -187,19 +231,28 @@ export async function enforceGuardrails(): Promise<GuardrailEnforcementResult> {
   }
   if (lastEpisode === evaluation.episodeKey) {
     // Same episode already escalated; the operator's revert stands.
-    return { evaluation, autoApplied: false, autoReason: null };
+    return { evaluation, autoApplied: false, autoReason: null, autoMode: null };
   }
 
+  // Target mode per the published catalog: a rail-class breach (breaker
+  // open / reconciliation break) → M2 quote-only; otherwise → M1 cautious.
+  const targetMode: "M1" | "M2" = evaluation.breachedKeys.some((k) => M2_GUARDRAIL_KEYS.includes(k)) ? "M2" : "M1";
   const reason =
-    `automatic — guardrail warning band crossed: ${evaluation.breachedKeys.join(", ")}. ` +
-    `Rule pack ${"2026.10.3"} → ${"2026.10.3-cautious.1"} (advance rates reduced, limits tightened; pricing unchanged).`;
+    targetMode === "M2"
+      ? `automatic — guardrail warning band crossed: ${evaluation.breachedKeys.join(", ")}. ` +
+        `Mode M2 (quote-only): quotes continue and are honoured at the quoted price, acceptances queue, no money moves until the rail is back.`
+      : `automatic — guardrail warning band crossed: ${evaluation.breachedKeys.join(", ")}. ` +
+        `Rule pack 2026.10.3 → 2026.10.3-cautious.1 (advance rates reduced, limits tightened; pricing unchanged).`;
 
   await db.$transaction(async (tx) => {
     await tx.statusState.update({
       where: { id: "singleton" },
       data: {
-        mode: "M1",
-        guardrailEpisodeJson: JSON.stringify({ episodeKey: evaluation.episodeKey, at: new Date().toISOString() }),
+        mode: targetMode,
+        // The episode record carries the reason so the ops banner can keep
+        // narrating the escalation on every later read — not just the exact
+        // heartbeat that fired it.
+        guardrailEpisodeJson: JSON.stringify({ episodeKey: evaluation.episodeKey, mode: targetMode, reason, at: new Date().toISOString() }),
       },
     });
     // One event per breached metric — the plain-language evidence.
@@ -216,6 +269,7 @@ export async function enforceGuardrails(): Promise<GuardrailEnforcementResult> {
             unit: m.unit,
             detail: m.detail,
             automatic: true,
+            mode: targetMode,
           }),
         },
       });
@@ -223,11 +277,12 @@ export async function enforceGuardrails(): Promise<GuardrailEnforcementResult> {
     await tx.operatorAction.create({
       data: {
         actor: "system:guardrails",
-        action: "guardrail_auto_m1",
+        action: targetMode === "M2" ? "guardrail_auto_m2" : "guardrail_auto_m1",
         targetRef: "status",
         reason,
         detailJson: JSON.stringify({
           episodeKey: evaluation.episodeKey,
+          appliedMode: targetMode,
           breached: evaluation.metrics.filter((m) => m.breached).map((m) => ({ key: m.key, value: m.value, band: m.band, detail: m.detail })),
         }),
       },
@@ -238,7 +293,7 @@ export async function enforceGuardrails(): Promise<GuardrailEnforcementResult> {
         type: "status.changed",
         subjectRef: "status",
         payloadJson: JSON.stringify({
-          mode: "M1",
+          mode: targetMode,
           message: null,
           automatic: true,
           actor: "system:guardrails",
@@ -248,7 +303,7 @@ export async function enforceGuardrails(): Promise<GuardrailEnforcementResult> {
     });
   });
 
-  return { evaluation, autoApplied: true, autoReason: reason };
+  return { evaluation, autoApplied: true, autoReason: reason, autoMode: targetMode };
 }
 
 /** The published view block (additive on /api/status). */
@@ -256,25 +311,36 @@ export interface GuardrailsView {
   evaluatedAt: string;
   metrics: { key: GuardrailKey; value: number; band: number; unit: GuardrailMetric["unit"]; breached: boolean; detail: string }[];
   autoTriggeredNow: boolean;
-  /** The episode key that last auto-applied M1 (null if automation never fired). */
+  /** The episode key that last auto-applied an escalation (null if automation never fired). */
   lastAutoEpisode: string | null;
+  /** The mode the last auto-escalation applied ("M1" | "M2" | null). */
+  lastAutoMode: "M1" | "M2" | null;
   autoReason: string | null;
 }
 
 export async function guardrailsView(evaluation: GuardrailsEval, autoApplied: boolean, autoReason: string | null): Promise<GuardrailsView> {
   let lastAutoEpisode: string | null = null;
+  let lastAutoMode: "M1" | "M2" | null = null;
+  let lastAutoReason: string | null = null;
   try {
     const st = await db.statusState.findUnique({ where: { id: "singleton" }, select: { guardrailEpisodeJson: true } });
-    const parsed = st?.guardrailEpisodeJson ? (JSON.parse(st.guardrailEpisodeJson) as { episodeKey?: string }) : null;
+    const parsed = st?.guardrailEpisodeJson ? (JSON.parse(st.guardrailEpisodeJson) as { episodeKey?: string; mode?: string; reason?: string }) : null;
     lastAutoEpisode = parsed?.episodeKey ?? null;
+    lastAutoMode = parsed?.mode === "M2" ? "M2" : parsed?.mode === "M1" ? "M1" : null;
+    lastAutoReason = typeof parsed?.reason === "string" ? parsed.reason : null;
   } catch {
     lastAutoEpisode = null;
+    lastAutoMode = null;
+    lastAutoReason = null;
   }
   return {
     evaluatedAt: new Date().toISOString(),
     metrics: evaluation.metrics.map((m) => ({ key: m.key, value: m.value, band: m.band, unit: m.unit, breached: m.breached, detail: m.detail })),
     autoTriggeredNow: autoApplied,
     lastAutoEpisode,
-    autoReason,
+    lastAutoMode,
+    // Prefer the live reason from THIS heartbeat; otherwise the recorded
+    // episode reason — the escalation stays narrated on every read.
+    autoReason: autoReason ?? lastAutoReason,
   };
 }

@@ -208,13 +208,17 @@ function renderEvent(ev: AppEvent, ctx: Enrichment): RenderedEvent {
     }
     case "guardrail.triggered": {
       title = "Guardrail crossed";
-      // Permyriad metrics read as percent; fils read as dirhams.
+      // Permyriad metrics read as percent; fils read as dirhams. The rail
+      // breaker reads as its state, and its band is the acceptable state
+      // (closed) — never a bare count.
       const unit = str("unit") ?? "permyriad";
-      const fmt = (v: number | null) =>
-        v === null ? null : unit === "permyriad" ? `${(v / 100).toFixed(0)}%` : unit === "fils" ? formatAed(v) : String(v);
-      const valueLabel = fmt(num("value"));
-      const bandLabel = fmt(num("band"));
-      detail = `${str("guardrail") ?? "A guardrail"} crossed its warning band (${valueLabel ?? "—"} vs band ${bandLabel ?? "—"}) — M1 applied automatically; limits tighten, pricing unchanged.`;
+      const isRail = str("guardrail") === "railBreaker";
+      const fmtValue = (v: number | null) =>
+        v === null ? null : unit === "permyriad" ? `${(v / 100).toFixed(0)}%` : unit === "fils" ? formatAed(v) : isRail ? (v >= 1 ? "open" : "closed") : String(v);
+      const valueLabel = fmtValue(num("value"));
+      const bandLabel = unit === "permyriad" ? `${(num("band") ?? 0) / 100 | 0}%` : unit === "fils" ? "≥ 0" : isRail ? "closed" : "0";
+      const m2 = str("mode") === "M2";
+      detail = `${str("guardrail") ?? "A guardrail"} crossed its warning band (${valueLabel ?? "—"} vs band ${bandLabel ?? "—"}) — ${m2 ? "M2 applied automatically; quotes honoured at the locked price, acceptances queue, no money moves" : "M1 applied automatically; limits tighten, pricing unchanged"}.`;
       break;
     }
     case "invoice.dispute_resolved":

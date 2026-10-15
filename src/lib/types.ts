@@ -265,11 +265,12 @@ export interface StatusDto {
   /** POST only: how many queued payouts were released when the rail returned. */
   queueDrained?: number;
   /** Automatic guardrails (PRD Part 8) — live telemetry with fixed warning
-   *  bands, plus the record of the last auto-escalation to M1. */
+   *  bands, plus the record of the last auto-escalation (M1 cautious / M2
+   *  quote-only). */
   guardrails?: {
     evaluatedAt: string;
     metrics: {
-      key: "disputeRate" | "lossRate" | "coverage30d" | "reconBreaks";
+      key: "disputeRate" | "lossRate" | "coverage30d" | "reconBreaks" | "railBreaker";
       value: number;
       band: number;
       unit: "permyriad" | "fils" | "count";
@@ -278,6 +279,7 @@ export interface StatusDto {
     }[];
     autoTriggeredNow: boolean;
     lastAutoEpisode: string | null;
+    lastAutoMode: "M1" | "M2" | null;
     autoReason: string | null;
   } | null;
 }

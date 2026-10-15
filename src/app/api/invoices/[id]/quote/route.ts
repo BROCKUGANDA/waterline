@@ -18,7 +18,7 @@ import { ok, problem, errors, DEMO_TENANT } from "@/lib/api";
 import { ensureSeed } from "@/lib/seed";
 import { canonicalJson, hashSnapshot, shortId } from "@/lib/canonical";
 import { evaluateAdvance, type FeatureSnapshot, type EngineDecision } from "@/lib/ruleengine";
-import { packForMode } from "@/lib/rulepacks";
+import { packForMode, CANDIDATE_PACK, BASE_PACK_VERSION } from "@/lib/rulepacks";
 import type { Offer } from "@prisma/client";
 
 const DAY = 86_400_000;
@@ -132,6 +132,44 @@ export async function GET(
         shadow: false,
       },
     });
+
+    // ── 3b. SHADOW evaluation (PRD 3.3 promotion lifecycle, phase 2): the
+    //        candidate pack scores the SAME feature snapshot in parallel and
+    //        records what it WOULD have decided — a shadow row decides
+    //        nothing and never touches the offer. Best-effort by design: a
+    //        shadow failure never blocks the live decision (the live record
+    //        is the precondition, the shadow is telemetry). Only runs while
+    //        the BASE pack is live — under M1 the cautious delta is the
+    //        active experiment; conflating the two would be dishonest.
+    if (pack.version === BASE_PACK_VERSION) {
+      try {
+        const shadowResult = evaluateAdvance(snapshot, CANDIDATE_PACK);
+        await db.decision.create({
+          data: {
+            id: shortId("dec"),
+            tenantId: DEMO_TENANT,
+            subjectRef: invoice.id,
+            subjectType: "invoice",
+            decisionType: "advance_offer",
+            inputHash: decision.inputHash,
+            rulepackVersion: CANDIDATE_PACK.version,
+            featureSnapshot: canonicalJson(snapshot),
+            outcome: shadowResult.outcome,
+            limitFils: shadowResult.limitFils,
+            advanceRatePermyriad: shadowResult.advanceRatePermyriad,
+            priceMilliBpsPerDay: shadowResult.priceMilliBpsPerDay,
+            bindingRule: shadowResult.bindingRule,
+            reasonCode: shadowResult.reasonCode,
+            reasonText: shadowResult.reasonText,
+            evaluatedAt: now,
+            actor: "system:shadow",
+            shadow: true,
+          },
+        });
+      } catch (e) {
+        console.error("[api/invoices/[id]/quote] shadow evaluation", e);
+      }
+    }
 
     // ── 4. Offer (approved/capped only): expire prior offered offers, then
     //       create the fresh one + mark the invoice quoted + record the event,

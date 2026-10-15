@@ -41,6 +41,7 @@ export function buildSystemPrompt(lang: string, contextJson: string, mode: strin
           "أنت «مرشد ووترلاين» — طبقة السيولة لأعمال دو في الإمارات.",
           "أسلوبك: قصير، واقعي، ودود بلا مبالغة. تجيب بالعربية الفصحى المبسطة.",
           "أرقامك تأتي حصراً من الحقائق أدناه بصيغة درهم جاهزة — لا تُجرِ عمليات حسابية ولا تبتكر أرقاماً.",
+          "عند سؤالك عن رقم محدد (رصيد، حد، التزام): ابحث عنه في الحقائق بالاسم نفسه وانقله حرفياً مع تسميته — «رصيد محفظة دو باي: ...» — ولا تستبدل برقم آخر من الحقائق.",
           "التسعير والحدود والأهلية تقررها حزمة القواعد الحتمية — أنت تشرح، لا تقرر أبداً.",
           "إن لم تكن الإجابة في الحقائق، قل ذلك بصراحة وأحِل إلى ما يستطيع المستخدم رؤيته في التطبيق.",
           "لا تقدّم نصائح استثمارية عامة؛ اشرح منتج ووترلاين: الدفع المبكر للفواتير، الضمان المرحلي، الطيار الآلي للخزانة.",
@@ -49,6 +50,7 @@ export function buildSystemPrompt(lang: string, contextJson: string, mode: strin
           "You are the WATERLINE advisor — the liquidity layer for du Business in the UAE.",
           "Voice: short, factual, warm without hype. Plain language for an SME owner.",
           "Your numbers come ONLY from the facts below, pre-formatted in dirhams — never compute, never invent figures.",
+          "When asked for a specific figure (balance, floor, obligation): find it in the facts by its exact name and quote it verbatim with its label — 'du Pay wallet balance: AED …' — never substitute a different fact's number.",
           "Pricing, limits and eligibility are decided by the deterministic rule pack — you explain, you never decide.",
           "If the answer is not in the facts, say so honestly and point to what the user can see in the app.",
           "Do not give general investment advice; explain WATERLINE's product: early invoice payment, milestone escrow, treasury autopilot.",
@@ -162,16 +164,16 @@ export async function buildContext(): Promise<string> {
 
   const lines = [
     `Entity: ${entity.legalName} — ${entity.sectorCode} sector, ${entity.emirate}, ${entity.tenureMonths} months tenure, billing band ${entity.billingBand}, KYB ${entity.kybState}, licence ${Math.ceil((entity.licenceExpiry.getTime() - now.getTime()) / DAY)} days remaining.`,
-    `du Pay wallet balance: ${formatAed(walletFils)}.`,
-    `Invested in treasury instruments: ${formatAed(investedFils)}.`,
+    `Available now (du Pay wallet balance — the exact figure the app's home shows as "Available now"; when the user asks for their balance or available money, THIS is the number): ${formatAed(walletFils)}.`,
+    `Invested in treasury instruments (earns yield, recallable — part of "Total liquidity", NOT spendable cash): ${formatAed(investedFils)}.`,
     `Treasury floor (absolute hard stop): ${formatAed(floorFils)}; horizon ${horizonDays} days; safety margin ${(safetyMarginPermyriad / 100).toFixed(1)}%.`,
-    `Obligations in horizon: ${formatAed(obligationsFils)} across ${obligations.length} items${obligations.length ? ` (next: ${obligations
+    `Obligations in horizon (future outflows, NOT money the user has): ${formatAed(obligationsFils)} across ${obligations.length} items${obligations.length ? ` (next: ${obligations
       .slice()
       .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
       .slice(0, 3)
       .map((o) => `${o.label} ${formatAed(o.amountFils)}`)
       .join("; ")})` : ""}.`,
-    `Sweepable today: ${sweep.outcome === "approved" ? formatAed(sweep.sweepableFils) : `nothing — ${sweep.reasonCode}: ${sweep.reasonText}`}.`,
+    `Sweepable today (SURPLUS above the floor that the autopilot may invest — a treasury capacity, NOT the user's balance): ${sweep.outcome === "approved" ? formatAed(sweep.sweepableFils) : `nothing — ${sweep.reasonCode}: ${sweep.reasonText}`}.`,
     `Invoices: ${readyCount} ready to fund (${formatAed(readyFils)}), ${pendingCount} pending buyer confirmation, ${disputedCount} disputed, ${settledCount} settled.`,
     `Buyers (top): ${buyers.map((b) => `${b.buyerName} (${b.tier}, pays in ~${b.avgDaysToPay} days, ${b.confirmedInvoiceCount} confirmed)`).join("; ")}.`,
     `Escrow: ${escrowContracts.length} milestone contracts, total ${formatAed(escrowTotal)}, released so far ${formatAed(escrowReleased)}.`,
