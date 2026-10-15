@@ -262,3 +262,22 @@ export function useGrantConsent() {
     },
   });
 }
+
+// ── Advisor (AI explainer — the rule pack decides, the advisor explains) ──
+
+export interface AdvisorTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export function useAdvisor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { question: string; lang: string; history: AdvisorTurn[] }) =>
+      api.post<{ answer: string; lang: string; mode: string }>("/api/advisor", vars),
+    onSuccess: () => {
+      // advisor.qa lands in the activity feed (append-only audit)
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    },
+  });
+}

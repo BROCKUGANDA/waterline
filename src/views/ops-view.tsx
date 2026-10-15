@@ -68,15 +68,17 @@ function StatusTab() {
             <span className="type-mono">{status.mode}</span>
           </div>
         </div>
-        <div className="type-body-strong mt-1">{status.modeCatalog.find((m) => m.mode === status.mode)?.label}</div>
-        <div className="type-caption text-ink-400">{status.modeCatalog.find((m) => m.mode === status.mode)?.description}</div>
+        <div className="type-body-strong mt-1">{T.ops.modeCopy[status.mode]?.label ?? status.modeCatalog.find((m) => m.mode === status.mode)?.label}</div>
+        <div className="type-caption text-ink-400">{T.ops.modeCopy[status.mode]?.description ?? status.modeCatalog.find((m) => m.mode === status.mode)?.description}</div>
       </div>
 
       {/* mode catalog */}
       <div>
         <SectionLabel className="mb-2">{T.ops.modeCatalog}</SectionLabel>
         <div className="space-y-2">
-          {status.modeCatalog.map((m) => (
+          {status.modeCatalog.map((m) => {
+            const copy = T.ops.modeCopy[m.mode];
+            return (
             <div
               key={m.mode}
               className={cn(
@@ -88,9 +90,9 @@ function StatusTab() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="type-mono text-[11px] text-ink-400">{m.mode}</span>
-                    <span className="type-body-strong">{m.label}</span>
+                    <span className="type-body-strong">{copy?.label ?? m.label}</span>
                   </div>
-                  <div className="type-caption text-ink-400 mt-0.5">{m.description}</div>
+                  <div className="type-caption text-ink-400 mt-0.5">{copy?.description ?? m.description}</div>
                 </div>
                 {status.mode !== m.mode && (
                   <button
@@ -108,10 +110,11 @@ function StatusTab() {
                 )}
               </div>
               {status.mode === m.mode && (
-                <div className="mt-1.5 type-caption text-accent-w-dark">✓ {m.smeSees}</div>
+                <div className="mt-1.5 type-caption text-accent-w-dark">✓ {copy?.smeSees ?? m.smeSees}</div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -356,14 +359,17 @@ function AuditTab() {
         {showConsents && (
           <div className="mt-2 space-y-2">
             {(consents?.consents ?? []).map((c) => {
-              const meta = T.consents as Record<string, { title?: string; hint?: string }>;
-              const label = meta[c.purpose] ?? { title: c.purpose };
+              // The dict maps purpose → label string and `${purpose}_hint` → hint
+              // string; look both up directly (no object shape to mis-cast).
+              const meta = T.consents as unknown as Record<string, string>;
+              const label = meta[c.purpose] ?? c.purpose;
+              const hint = meta[`${c.purpose}_hint`];
               const revoked = !!c.revokedAt;
               return (
                 <div key={c.id} className={cn("rounded-[10px] border p-3 flex items-center justify-between gap-3", revoked ? "border-border bg-surface-2/50 opacity-70" : "border-border bg-card")}>
                   <div className="min-w-0">
-                    <div className="type-body-strong">{label.title}</div>
-                    <div className="type-caption text-ink-400">{label.hint}</div>
+                    <div className="type-body-strong">{label}</div>
+                    {hint && <div className="type-caption text-ink-400">{hint}</div>}
                     {revoked && <div className="type-caption text-danger-w mt-0.5">{T.consents.revoked}</div>}
                   </div>
                   <button

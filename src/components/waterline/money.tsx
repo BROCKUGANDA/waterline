@@ -32,7 +32,7 @@ export function Money({
   whole?: boolean;
   className?: string;
   animate?: boolean;
-  colorize?: "default" | "accent" | "success" | "danger";
+  colorize?: "default" | "accent" | "success" | "danger" | "treasury";
 }) {
   const lang = useUi((s) => s.lang);
   // Digit roll on the changed amount: adjust state during render (React
@@ -51,7 +51,7 @@ export function Money({
 
   const text = lang === "ar" ? formatAedAr(fils, { whole }) : formatAed(fils, { whole });
   const color =
-    colorize === "accent" ? "text-accent-w" : colorize === "success" ? "text-success-w" : colorize === "danger" ? "text-danger-w" : "";
+    colorize === "accent" ? "text-accent-w" : colorize === "success" ? "text-success-w" : colorize === "danger" ? "text-danger-w" : colorize === "treasury" ? "text-treasury-w" : "";
 
   return (
     <span className={cn("money", sizeClass[size], color, rolled && "digit-roll", className)}>

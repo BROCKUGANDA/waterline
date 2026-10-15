@@ -32,6 +32,18 @@ const kindTone: Record<string, string> = {
   custom: "bg-ink-400 border-ink-400/50",
 };
 
+function kindLabel(kind: string, T: ReturnType<typeof t>["cash"]): string {
+  const map: Record<string, string> = {
+    payroll: T.payroll,
+    rent: T.rent,
+    vat: T.vat,
+    supplier: T.supplier,
+    du_bill: T.duBill,
+    custom: T.custom,
+  };
+  return map[kind] ?? T.custom;
+}
+
 export function RunwayStrip({ obligations, walletFils }: { obligations: ObligationDto[]; walletFils: number }) {
   const lang = useUi((s) => s.lang);
   const T = t(lang);
@@ -55,7 +67,10 @@ export function RunwayStrip({ obligations, walletFils }: { obligations: Obligati
           <div className="type-heading">{T.cash.runway}</div>
           <div className="type-caption text-ink-400">{T.cash.runwayHint}</div>
         </div>
-        <Money fils={walletFils} size="caption" animate={false} className="text-ink-400" />
+        <div className="text-end">
+          <div className="type-label text-ink-400">{lang === "ar" ? "نقد اليوم" : "cash today"}</div>
+          <Money fils={walletFils} size="caption" animate={false} className="text-ink-600" />
+        </div>
       </div>
 
       <div className="relative h-14 grad-lift rounded-[10px] border border-border elev-1 overflow-visible">
@@ -76,7 +91,7 @@ export function RunwayStrip({ obligations, walletFils }: { obligations: Obligati
             onClick={() => setSelected(selected?.id === o.id ? null : o)}
             className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rtl:translate-x-1/2 group"
             style={{ [`${lang === "ar" ? "right" : "left"}`]: `${position(o)}%` }}
-            aria-label={`${o.label} — ${T.cash.confidence(Math.round(o.confidencePermyriad / 100))}`}
+            aria-label={`${kindLabel(o.kind, T.cash)} — ${o.label} — ${T.cash.confidence(Math.round(o.confidencePermyriad / 100))}`}
           >
             <span
               className={cn(
@@ -110,9 +125,10 @@ export function RunwayStrip({ obligations, walletFils }: { obligations: Obligati
             <div className="flex items-center gap-2">
               <WlIcon name={kindIcon[selected.kind] ?? "plus"} size={16} className="text-accent-w" />
               <span className="type-body-strong">{selected.label}</span>
+              <span className="type-label text-ink-400 px-1.5 py-0.5 rounded-sm bg-surface-2">{kindLabel(selected.kind, T.cash)}</span>
             </div>
             <div className="mt-1 flex items-baseline justify-between">
-              <Money fils={selected.amountFils} size="body" />
+              <Money fils={selected.amountFils} size="body" whole={false} />
               <span className="type-caption text-ink-400">
                 {T.cash.confidence(Math.round(selected.confidencePermyriad / 100))}
               </span>

@@ -151,7 +151,7 @@ function SettledCelebration({ payout }: { payout: PayoutDto }) {
       </div>
       <div className="mt-2 flex justify-between items-baseline">
         <span className="type-label text-ink-400">{T.invoices.netProceeds}</span>
-        <Money fils={payout.amountFils} size="amount" colorize="success" />
+        <Money fils={payout.amountFils} size="amount" colorize="success" whole={false} />
       </div>
     </motion.div>
   );
@@ -256,7 +256,7 @@ function QuoteFlow({ invoiceId }: { invoiceId: string }) {
           {invoice.latestOffer?.netProceedsFils != null && (
             <div className="mt-2 flex justify-between items-baseline">
               <span className="type-label text-ink-400">{T.invoices.netProceeds}</span>
-              <Money fils={invoice.latestOffer.netProceedsFils} size="heading" colorize="success" />
+              <Money fils={invoice.latestOffer.netProceedsFils} size="heading" colorize="success" whole={false} />
             </div>
           )}
         </div>
@@ -304,7 +304,7 @@ function QuoteFlow({ invoiceId }: { invoiceId: string }) {
 
           <div className="flex items-baseline justify-between">
             <span className="type-label text-ink-400">{T.invoices.principal}</span>
-            <Money fils={offer.principalFils} size="amount" colorize="accent" />
+            <Money fils={offer.principalFils} size="amount" colorize="accent" whole={false} />
           </div>
 
           <DateSlider model={model} daysEarly={daysEarly || 1} onChange={setDaysEarly} />
@@ -432,18 +432,18 @@ function DetailBody({ invoiceId }: { invoiceId: string }) {
 
       <div className="rounded-[10px] border border-border bg-card p-3.5 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="type-caption text-ink-400">{T.invoices.stateLabels[invoice.verificationState] ?? invoice.verificationState}</span>
-          <span className="flex items-center gap-1.5">
+          <span className="type-body-strong text-ink-600 flex items-center gap-1.5">
             <StatusDot
               tone={invoice.verificationState === "verified" ? "success" : invoice.verificationState === "disputed" ? "danger" : "caution"}
               pulse={invoice.verificationState === "deduped"}
             />
-            {invoice.verifiedVia && (
-              <span className="type-caption text-ink-400">
-                {T.invoices.verifiedVia[invoice.verifiedVia as keyof typeof T.invoices.verifiedVia]}
-              </span>
-            )}
+            {T.invoices.stateLabels[invoice.verificationState] ?? invoice.verificationState}
           </span>
+          {invoice.verifiedVia && (
+            <span className="type-caption text-ink-400">
+              {T.invoices.verifiedVia[invoice.verifiedVia as keyof typeof T.invoices.verifiedVia]}
+            </span>
+          )}
         </div>
         {invoice.verificationState === "deduped" && <ConfirmBuyerButton invoiceId={invoice.id} />}
       </div>
@@ -552,7 +552,7 @@ export function InvoicesView() {
         )}
       </AnimatePresence>
 
-      {!isDesktop && (
+      {!isDesktop && selectedInvoiceId && (
         <Drawer key="sheet" open={!!selectedInvoiceId} onOpenChange={(v) => !v && closeDetail()}>
           <DrawerContent>
             <DrawerTitle className="sr-only">{T.common.details}</DrawerTitle>

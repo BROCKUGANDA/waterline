@@ -12,7 +12,7 @@ import { StatusDot } from "./primitives";
 import { WlIcon } from "./icons";
 import { t } from "@/lib/i18n";
 import { useUi } from "@/stores/ui";
-import type { PayoutDto } from "@/lib/types";
+import type { PayoutDto, PayoutStage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function fmtElapsed(ms: number): string {
@@ -76,7 +76,7 @@ export function StageTracker({ payout, amountFils }: { payout: PayoutDto; amount
       </div>
 
       <div className="flex items-center mb-3">
-        <Money fils={amountFils} size="amount" colorize="accent" />
+        <Money fils={amountFils} size="amount" colorize="accent" whole={false} />
         <span className="type-caption text-ink-400 ms-2">→ {payout.destinationRef}</span>
       </div>
 

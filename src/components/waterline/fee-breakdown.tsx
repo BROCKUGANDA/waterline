@@ -43,13 +43,13 @@ export function FeeBreakdown({ model, daysEarly, className }: { model: FeeModel;
         <span className="type-body-strong money">{formatBps(model.rateMilliBps)}</span>
       </FeeRow>
       <FeeRow label={T.invoices.principal}>
-        <Money fils={model.principalFils} size="body" animate={false} />
+        <Money fils={model.principalFils} size="body" animate={false} whole={false} />
       </FeeRow>
       <FeeRow label={T.invoices.fee}>
-        <Money fils={fee} size="body" colorize="accent" animate={false} />
+        <Money fils={fee} size="body" colorize="accent" animate={false} whole={false} />
       </FeeRow>
       <FeeRow label={T.invoices.netProceeds} strong>
-        <Money fils={net} size="heading" colorize="accent" animate={false} />
+        <Money fils={net} size="heading" colorize="accent" animate={false} whole={false} />
       </FeeRow>
       <div className="type-caption text-ink-400 mt-2">{T.invoices.feeHint}</div>
     </div>
@@ -116,7 +116,7 @@ export function DateSlider({
       </div>
       <div className="flex items-center justify-between mt-2 type-caption">
         <span className="text-ink-400">{T.invoices.settleOn}</span>
-        <Money fils={model.principalFils - fee} size="caption" colorize="accent" />
+        <Money fils={model.principalFils - fee} size="caption" colorize="accent" whole={false} />
       </div>
     </div>
   );

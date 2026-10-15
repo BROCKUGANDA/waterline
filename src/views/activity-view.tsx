@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/waterline/invoice-card";
 import { WlIcon, type WlIconName } from "@/components/waterline/icons";
 import { CopyRef } from "@/components/waterline/primitives";
 import { t } from "@/lib/i18n";
+import { renderActivityEventAr } from "@/lib/activity-ar";
 import { useUi } from "@/stores/ui";
 import type { ActivityEventDto } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ const typeIcon: Record<string, WlIconName> = {
   "status.changed": "status-degraded",
   "onboarding.completed": "buyer",
   "reserve.released": "arrow-in",
+  "advisor.qa": "advisor",
 };
 
 const typeTone: Record<string, string> = {
@@ -56,6 +58,7 @@ const typeTone: Record<string, string> = {
   "sweep.recalled": "text-treasury-w bg-treasury-w/10",
   "offer.accepted": "text-accent-w bg-accent-w-soft",
   "payout.initiated": "text-accent-w bg-accent-w-soft",
+  "advisor.qa": "text-accent-w bg-accent-w-soft",
 };
 
 function EventRow({ event, index }: { event: ActivityEventDto; index: number }) {
@@ -63,6 +66,9 @@ function EventRow({ event, index }: { event: ActivityEventDto; index: number }) 
   const icon = typeIcon[event.type] ?? "activity";
   const tone = typeTone[event.type] ?? "text-ink-400 bg-surface-2";
   const time = new Date(event.occurredAt).toLocaleTimeString(lang === "ar" ? "ar-AE" : "en-AE", { hour: "2-digit", minute: "2-digit" });
+  // Arabic mirror rendered client-side from the structured facts; the English
+  // server copy stays canonical and is the fallback for unknown types.
+  const copy = lang === "ar" ? renderActivityEventAr(event) : { title: event.title, detail: event.detail };
 
   return (
     <motion.li
@@ -76,10 +82,10 @@ function EventRow({ event, index }: { event: ActivityEventDto; index: number }) 
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="type-body-strong truncate">{event.title}</span>
+          <span className="type-body-strong truncate">{copy.title}</span>
           <span className="type-caption text-ink-400 money shrink-0">{time}</span>
         </div>
-        {event.detail && <div className="type-caption text-ink-600 mt-0.5 break-words">{event.detail}</div>}
+        {copy.detail && <div className="type-caption text-ink-600 mt-0.5 break-words">{copy.detail}</div>}
         {event.subjectRef && (
           <div className="mt-1">
             <CopyRef value={event.subjectRef} />

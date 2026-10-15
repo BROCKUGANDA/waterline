@@ -13,7 +13,7 @@
   --wl-ink-900: #0B1420;
   --wl-ink-800: #141C28;
   --wl-ink-600: #3A4350;
-  --wl-ink-400: #767F8C;
+  --wl-ink-400: #66707D; /* ≥4.5:1 on paper — muted copy stays AA-readable */
   --wl-ink-200: #C7CCD4;
   --wl-ink-100: #E8EBEF;
 

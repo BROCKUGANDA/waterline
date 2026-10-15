@@ -62,7 +62,7 @@ function MilestoneTracker({ contract, onAction }: { contract: EscrowContractDto;
                     {m.reviewWindowDays > 0 && ` · ${T.escrow.reviewWindow(m.reviewWindowDays)}`}
                   </div>
                 </div>
-                <Money fils={m.amountFils} size="body" animate={false} className={done ? "text-success-w" : ""} />
+                <Money fils={m.amountFils} size="body" animate={false} whole={false} className={done ? "text-success-w" : ""} />
               </div>
 
               {/* state line */}
@@ -112,7 +112,7 @@ function MilestoneTracker({ contract, onAction }: { contract: EscrowContractDto;
                       {T.escrow.approve}
                     </button>
                   )}
-                  {m.state !== "disputed" && m.state !== "released" && (
+                  {m.state !== "disputed" && (
                     <button
                       type="button"
                       disabled={busy === m.id}
@@ -185,7 +185,7 @@ function ContractCard({ contract }: { contract: EscrowContractDto }) {
             </div>
           </div>
           <div className="text-end shrink-0">
-            <Money fils={contract.totalFils} size="heading" className="text-white" animate={false} />
+            <Money fils={contract.totalFils} size="heading" className="text-white" animate={false} whole={false} />
             <div className="type-caption text-white/80 mt-0.5">
               {new Date(contract.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE", { day: "numeric", month: "short", year: "numeric" })}
             </div>
@@ -208,10 +208,10 @@ function ContractCard({ contract }: { contract: EscrowContractDto }) {
         </div>
         <div className="flex justify-between type-caption text-ink-400 mb-3">
           <span>
-            {T.escrow.released}: <Money fils={contract.releasedFils ?? 0} size="caption" colorize="success" animate={false} />
+            {T.escrow.released}: <Money fils={contract.releasedFils ?? 0} size="caption" colorize="success" animate={false} whole={false} />
           </span>
           <span>
-            {T.escrow.pending}: <Money fils={contract.pendingFils ?? contract.totalFils - (contract.releasedFils ?? 0)} size="caption" animate={false} />
+            {T.escrow.pending}: <Money fils={contract.pendingFils ?? contract.totalFils - (contract.releasedFils ?? 0)} size="caption" animate={false} whole={false} />
           </span>
         </div>
 
@@ -384,7 +384,7 @@ export function EscrowView() {
             <WlIcon name="lock-solid" size={16} className="text-escrow-w" />
             <span className="type-body text-ink-600">{T.escrow.lockedFunds}</span>
           </div>
-          <Money fils={totalEscrow} size="heading" className="text-escrow-w" />
+          <Money fils={totalEscrow} size="heading" className="text-escrow-w" whole={false} />
         </div>
       )}
 

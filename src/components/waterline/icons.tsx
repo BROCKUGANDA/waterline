@@ -11,7 +11,7 @@ export type WlIconName =
   | "audit-record" | "rule-pack" | "status-degraded" | "kill-switch" | "activity"
   | "waterline" | "gauge" | "check" | "close" | "plus" | "copy" | "chevron"
   | "arrow-out" | "arrow-in" | "clock" | "sun" | "moon" | "globe" | "terminal"
-  | "info" | "alert" | "lock-solid" | "spark" | "undo" | "calendar" | "user";
+  | "info" | "alert" | "lock-solid" | "spark" | "undo" | "calendar" | "user" | "advisor";
 
 const PATHS: Record<WlIconName, React.ReactNode> = {
   wallet: (
@@ -229,6 +229,12 @@ const PATHS: Record<WlIconName, React.ReactNode> = {
     <>
       <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
       <path d="M18.5 15.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" />
+    </>
+  ),
+  advisor: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M15.2 8.8l-2 4.4-4.4 2 2-4.4z" />
     </>
   ),
   undo: (

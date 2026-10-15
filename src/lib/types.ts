@@ -35,7 +35,7 @@ export interface InvoiceDto {
   verifiedAt: string | null;
   fundingState: FundingState;
   invoiceHash?: string;
-  latestOffer?: { id: string; state: string; principalFils: number; rateMilliBps: number; expiresAt: string } | null;
+  latestOffer?: { id: string; state: string; principalFils: number; rateMilliBps: number; expiresAt: string; netProceedsFils?: number | null } | null;
   latestDecision?: { outcome: string; reasonCode: string; reasonText: string; reasonCodeText?: string } | null;
 }
 
@@ -269,6 +269,13 @@ export interface ActivityEventDto {
   detail: string;
   subjectRef: string | null;
   occurredAt: string;
+  /** Structured facts for client-side localization; server title/detail stay canonical (EN). */
+  params?: {
+    ref: string | null;
+    milestone: string | null;
+    description: string | null;
+    payload: Record<string, unknown>;
+  };
 }
 
 export interface LedgerEntryDto {

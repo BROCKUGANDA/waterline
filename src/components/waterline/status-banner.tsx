@@ -24,6 +24,7 @@ export function StatusBanner() {
   if (mode === "M0" && !killOn && openBreakers.length === 0) return null;
 
   const catalog = status.modeCatalog?.find((m) => m.mode === mode);
+  const localizedSmeSees = T.ops.modeCopy[mode]?.smeSees;
   const text =
     mode === "M0" ? T.status.m0
       : mode === "M1" ? T.status.m1
@@ -76,8 +77,8 @@ export function StatusBanner() {
             ))}
           </div>
         )}
-        {catalog?.smeSees && tone !== "neutral" && (
-          <div className="type-caption opacity-70 mt-0.5">{catalog.smeSees}</div>
+        {(localizedSmeSees ?? catalog?.smeSees) && tone !== "neutral" && (
+          <div className="type-caption opacity-70 mt-0.5">{localizedSmeSees ?? catalog?.smeSees}</div>
         )}
       </div>
     </div>

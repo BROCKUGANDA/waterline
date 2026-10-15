@@ -16,7 +16,7 @@ import { SectionLabel, StatusDot, SkeletonCard } from "@/components/waterline/pr
 import { WlIcon } from "@/components/waterline/icons";
 import { t } from "@/lib/i18n";
 import { useUi } from "@/stores/ui";
-import { formatAed } from "@/lib/money";
+import { formatAed, formatAedAr } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 /** Interpolated collapsing balance header. */
@@ -53,7 +53,7 @@ function BalanceHeader({ walletFils, asOf }: { walletFils: number; asOf: string 
             className="money type-display text-accent-w-deep dark:text-accent-w"
             style={{ fontSize: displaySize, lineHeight: 1.1, transition: "font-size 100ms linear" }}
           >
-            {formatAed(walletFils)}
+            {lang === "ar" ? formatAedAr(walletFils) : formatAed(walletFils)}
           </span>
           <span className="type-caption text-ink-400" style={{ opacity: 1 - p * 0.4 }}>
             {T.cash.walletBalance} · {T.common.asOf}{" "}
@@ -97,7 +97,7 @@ function TreasuryPanel() {
     try {
       const res = await sweep.mutateAsync({ instrumentRef: selectedInstrument.ref });
       if (res.sweep) {
-        toast.success(T.cash.swept(formatAed((res.sweep as { amountFils: number }).amountFils), selectedInstrument.name));
+        toast.success(T.cash.swept(lang === "ar" ? formatAedAr((res.sweep as { amountFils: number }).amountFils) : formatAed((res.sweep as { amountFils: number }).amountFils), selectedInstrument.name));
       } else {
         toast(T.cash.sweepRejected, { description: (res.decision as { reasonText: string }).reasonText });
       }
@@ -227,7 +227,7 @@ function TreasuryPanel() {
           {data.earnedYieldFils > 0 && (
             <div className="mt-2 flex justify-between type-caption text-ink-400">
               <span>{T.cash.earnedYield}</span>
-              <Money fils={data.earnedYieldFils} size="caption" colorize="treasury" />
+              <Money fils={data.earnedYieldFils} size="caption" colorize="treasury" whole={false} />
             </div>
           )}
         </div>
@@ -255,18 +255,18 @@ function TreasuryPanel() {
                     {(s.accruedYieldFils ?? s.yieldFils) > 0 && (
                       <>
                         {" · "}
-                        <Money fils={s.accruedYieldFils ?? s.yieldFils} size="caption" animate={false} colorize="treasury" />{" "}
+                        <Money fils={s.accruedYieldFils ?? s.yieldFils} size="caption" animate={false} colorize="treasury" whole={false} />{" "}
                         {T.cash.yield}
                       </>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <Money fils={s.amountFils} size="body" animate={false} />
+                  <Money fils={s.amountFils} size="body" animate={false} whole={false} />
                   {s.state === "swept" && (
                     <button
                       type="button"
-                      onClick={() => recall.mutate(s.id, { onSuccess: () => toast.success(T.cash.recalled(formatAed(s.amountFils))) })}
+                      onClick={() => recall.mutate(s.id, { onSuccess: () => toast.success(T.cash.recalled(lang === "ar" ? formatAedAr(s.amountFils) : formatAed(s.amountFils))) })}
                       className="h-9 px-3 rounded-md border border-border type-caption hover:border-treasury-w/50 hover:text-treasury-w press-scale flex items-center gap-1.5"
                     >
                       <WlIcon name="undo" size={14} />
@@ -376,7 +376,7 @@ export function CashView() {
                 </div>
               </div>
               <div className="text-end">
-                <Money fils={overview.invoices.readyFils} size="heading" colorize="accent" />
+                <Money fils={overview.invoices.readyFils} size="heading" colorize="accent" whole={false} />
                 <div className="flex items-center gap-1 type-caption text-ink-400">
                   {T.common.viewAll}
                   <WlIcon name="chevron" size={13} className={lang === "ar" ? "rotate-180" : ""} />

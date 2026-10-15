@@ -21,6 +21,16 @@ interface RenderedEvent {
   detail: string;
   subjectRef: string | null;
   occurredAt: string;
+  /** Structured pieces for client-side localization (AR mirror). The English
+   * title/detail above remain the canonical server rendering; params carries
+   * the same facts so the client can render an Arabic mirror without ever
+   * re-deriving money (amounts stay integer fils until formatted). */
+  params: {
+    ref: string | null;
+    milestone: string | null;
+    description: string | null;
+    payload: Record<string, unknown>;
+  };
 }
 
 interface Enrichment {
@@ -209,6 +219,12 @@ function renderEvent(ev: AppEvent, ctx: Enrichment): RenderedEvent {
       title = "Ledger opened";
       detail = "Opening balances posted — every balance since is derived, never stored as truth.";
       break;
+    case "advisor.qa": {
+      title = "Advisor question";
+      const q = str("question");
+      detail = q ? `“${q}” — answered from live figures; the rule pack decides, the advisor explains.` : "Answered from live figures; the rule pack decides, the advisor explains.";
+      break;
+    }
     default: {
       title = ev.type
         .split(".")
@@ -226,6 +242,12 @@ function renderEvent(ev: AppEvent, ctx: Enrichment): RenderedEvent {
     detail,
     subjectRef: ev.subjectRef,
     occurredAt: ev.occurredAt.toISOString(),
+    params: {
+      ref: ref() || null,
+      milestone: ctx.milestoneDesc.has(ev.subjectRef ?? "") ? milestone() : str("milestone"),
+      description: ctx.contracts.get(ev.subjectRef ?? "")?.description ?? str("description"),
+      payload: p,
+    },
   };
 }
 

@@ -69,7 +69,7 @@ export function InvoiceCard({
           <div className="type-caption text-ink-400 mt-0.5 type-mono text-[12px]">{invoice.externalRef}</div>
         </div>
         <div className="text-end shrink-0">
-          <Money fils={invoice.grossFils} size="heading" />
+          <Money fils={invoice.grossFils} size="heading" whole={false} />
           <div className={cn("type-caption mt-0.5 money", overdue ? "text-danger-w" : "text-ink-400")}>
             {overdue ? T.invoices.overdue(-invoice.dueInDays) : T.invoices.dueIn(invoice.dueInDays)}
           </div>

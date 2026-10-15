@@ -5,12 +5,14 @@
 // visible — icon-only navigation fails users under stress, which is exactly
 // when this product is used (PRD 11.7).
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import { useUi, type View } from "@/stores/ui";
 import { t, type Lang } from "@/lib/i18n";
 import { WlIcon, WaterlineLogo, type WlIconName } from "./icons";
 import { StatusBanner } from "./status-banner";
+import { AdvisorPanel } from "./advisor";
 import { cn } from "@/lib/utils";
 
 const NAV: { view: View; icon: WlIconName; label: (l: Lang) => string }[] = [
@@ -55,6 +57,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const T = t(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
 
+  // next-themes resolves AFTER mount — render the pre-mount branch that
+  // matches the server (no "dark" on SSR) so hydration never mismatches.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(id);
+  }, []);
+  const isDark = mounted && theme === "dark";
+
   return (
     <div className="min-h-screen flex flex-col bg-background" dir={dir}>
       <StatusBanner />
@@ -72,7 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {!railCollapsed && (
               <div className="min-w-0">
                 <div className="type-heading tracking-wide">{T.appName}</div>
-                <div className="type-caption text-ink-400 truncate">{T.appTagline}</div>
+                <div className="type-caption text-ink-400 leading-snug">{T.appTagline}</div>
               </div>
             )}
           </div>
@@ -101,7 +112,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          <div className="p-2 space-y-1">
+          {/* Utilities — separated from navigation by a rule (PRD 11.5 rail anatomy) */}
+          <div className="p-2 space-y-1 border-t border-border">
             <button
               type="button"
               onClick={toggleLang}
@@ -113,12 +125,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
             <button
               type="button"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              onClick={() => setTheme(isDark ? "light" : "dark")}
               className="w-full flex items-center gap-3 rounded-md px-3 py-2 type-caption text-ink-600 hover:bg-surface-2 press-scale"
-              title={theme === "dark" ? T.settings.light : T.settings.dark}
+              title={isDark ? T.settings.light : T.settings.dark}
             >
-              <WlIcon name={theme === "dark" ? "sun" : "moon"} size={20} />
-              {!railCollapsed && <span>{theme === "dark" ? T.settings.light : T.settings.dark}</span>}
+              <WlIcon name={isDark ? "sun" : "moon"} size={20} />
+              {!railCollapsed && <span>{isDark ? T.settings.light : T.settings.dark}</span>}
             </button>
             <button
               type="button"
@@ -146,11 +158,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 type="button"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                onClick={() => setTheme(isDark ? "light" : "dark")}
                 aria-label={T.settings.theme}
                 className="h-11 w-11 flex items-center justify-center rounded-md text-ink-600 press-scale"
               >
-                <WlIcon name={theme === "dark" ? "sun" : "moon"} size={20} />
+                <WlIcon name={isDark ? "sun" : "moon"} size={20} />
               </button>
               <button
                 type="button"
@@ -183,6 +195,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </footer>
         </div>
       </div>
+
+      {/* AI advisor — explains, never decides; absent in M4 */}
+      <AdvisorPanel />
 
       {/* Mobile bottom bar — four tabs, labels always visible */}
       <nav

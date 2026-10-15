@@ -159,3 +159,39 @@ Stage Summary:
 - WATERLINE is feature-complete for Phase-1 demo scope: dynamic discounting golden path, escrow, treasury autopilot, operator console, bilingual RTL, dark mode, degrade modes driving the UI, deterministic rule pack with replay, balanced double-entry ledger.
 - Dev server runs on :3000 (nohup+disown pattern — plain & dies with the shell call).
 - Remaining polish candidates: localize modeCatalog copy server-side; M2 payout queueing semantics; portfolio ceiling E07 demo scenario; onboarding/consent first-run flow; AI advisory copilot via z-ai-web-dev-sdk.
+
+---
+Task ID: 4 (main agent)
+Agent: main-orchestrator (Z.ai Code)
+Task: Round 4 — QA re-assessment via agent-browser, bug fixes (fee-precision display, Arabic localization gaps, consents labels, hydration mismatch, TS debt), and new features (AI advisory copilot, API discovery endpoint) with VLM-driven styling polish.
+
+Work Log:
+- Read worklog (tasks 0/2-a/2-b1/2-b2/3); dev server verified up on :3000 (nohup pattern), lint clean, all API routes 200, ledger balanced (15 txns).
+- QA sweep with agent-browser (named session, snapshot/read/errors/console): all 5 views render, mobile 375px bottom bar verified fixed+visible, no console errors. Golden-path re-check: ESS-INV-2199 E_MIN_SIZE neutral card; NTZ-0101 E06 60% cap (AED 9,000 advance).
+- BUGS FOUND & FIXED:
+  1. Fee-precision display (PRD invariant violation): Money component defaulted whole=true — fee card showed "AED 81" instead of exact "AED 80.64" (8,064 fils), net "AED 8,919" instead of "AED 8,919.36". Flipped whole={false} on every fils-precision figure: fee-breakdown (fee/net/settle-on/principal), invoices-view (advance, net proceeds, payout amount), stage-tracker, invoice-card gross, escrow amounts (milestone/total/released/pending/aggregate), cash-view (sweep amounts, yield figures, ready total), runway obligation amounts. Verified in UI: 9,000.00 − 80.64 = 8,919.36 exact.
+  2. Arabic modeCatalog leak: ops console + status-banner smeSees rendered English in AR. Added client-side modeCopy map (EN mirrors server strings byte-identically, AR designed mirror) to i18n; ops-view + status-banner use it with server-string fallback.
+  3. Arabic activity feed leak: server-rendered EN copy shown in AR. Activity API now returns additive `params` {ref, milestone, description, payload} per event (additive, contract-compatible); new src/lib/activity-ar.ts renders the AR mirror client-side (formatAedAr, Eastern Arabic numerals, defensive fallbacks to server copy); activity-view EventRow uses it when lang=ar. Also mapped outcome enums (approved/rejected/capped) to Arabic.
+  4. Obligation labels English in AR runway: added localized kind chip (الرواتب/الإيجار/…) to marker popover + aria-labels; kind stays metadata, label stays user data.
+  5. Arabic treasury terminology: "اكتساب" (acquisition — wrong) → "توظيف" family (المتاح للتوظيف اليوم/وظّف الآن/سجل التوظيف/وُظّف).
+  6. Arabic balance header: formatAed → formatAedAr (د.إ with Arabic numerals), plus sweep/recall toasts.
+  7. Consents rows rendered EMPTY titles at runtime (dict values are strings, code read .title/.hint off them — masked by an invalid `as` cast): proper string lookup with `_hint` keys; verified in UI ("Bank data (Open Finance) / Read-only balances for forecasting" etc.).
+  8. Hydration mismatch on dark-mode load (server renders moon icon, dark client renders sun): mounted-guard on theme buttons in app-shell (isDark = mounted && theme === "dark", timeout-effect pattern to satisfy react-hooks/set-state-in-effect). Verified: fresh session + dark reload = 0 page errors.
+  9. Pre-existing TS debt cleared to zero project-wide: PayoutStage import, colorize "treasury" union (added + color mapping), escrow redundant state comparison, InvoiceDto.latestOffer.netProceedsFils, mobile Drawer null-guard, ops consents cast. `bunx tsc --noEmit` now clean (only examples/skills excluded); `bun run lint` clean.
+- NEW FEATURES:
+  1. AI ADVISOR COPILOT (PRD-polish item): POST /api/advisor (z-ai-web-dev-sdk, backend only) — builds live tenant context from the same derived balances as /api/overview (wallet, invested, floor, sweepable via evaluateSweep, invoice pipeline, top buyers, escrow totals derived from milestone states, recent decisions, mode) with money pre-formatted server-side so the model never computes on fils; system prompt encodes WATERLINE voice + "explains, never decides" + cite-only-context + reply-in-user-language. Guards: question 1–500 chars (400), history sanitized ≤6 turns, M4 → 503 honest pause; every Q&A append-only audited as advisor.qa AppEvent (renders in activity feed EN+AR). Frontend: advisor.tsx — FAB (grad-liquidity, compass glyph, above mobile tab bar / corner on desktop, side-aware RTL), Sheet chat panel with suggestion chips (4, localized), thread bubbles, composer (Enter to send, 500 counter), clear conversation, M4 honest absence; wired into app-shell; "advisor" icon added to icon set. Verified end-to-end in EN + AR (correct 60% cap explanation; correct tier rates 2.6–4.8 bps/day; correct fee worked example).
+  2. API DISCOVERY/HEALTH: GET /api (replaced scaffold "Hello, world!") — 28-route map (method/purpose/money-moving), envelope+money conventions, live health probe (database/seeded/ledger balanced). Never throws: failures reported in body.
+  3. Runway header label "cash today" (نقد اليوم) clarifies the wallet figure.
+- STYLING POLISH (VLM-driven review of screenshots):
+  - ink-400 light-mode #767F8C (~4.06:1) → #66707D (≥4.7:1) — muted copy now WCAG-AA.
+  - Rail utilities separated from navigation by border-t divider.
+  - Invoice detail verification row: StatusDot paired with strong state label (was scattered muted caption + dot on the wrong side).
+  - Sidebar tagline wraps instead of truncating.
+- Ops console localized mode catalog verified in AR (طبيعي/حذر/تسعير فقط/التمويل موقوف/قراءة فقط with full descriptions + smeSees).
+- DB left in demo state: M0, no kill switches, ledger balanced 15 txns, wallet AED 83,380, 2 ready invoices. M4-guard test events (status.changed M4→M0 round trip + advisor.qa rows) remain in the activity feed as honest audit records.
+- Verified via agent-browser after all changes: fee card exact, advisor EN+AR flow, AR mode catalog/activity/runway/balance, consents titles, dark-mode hydration (fresh session 0 errors), mobile FAB placement; screenshots saved to download/qa-round5-*.png.
+- Dev server restarted once this round (stale Prisma connection caused SQLITE_READONLY on writes after long uptime — restart re-opened the connection; if it recurs, restart dev server).
+
+Stage Summary:
+- Round 4 complete: 9 bugs fixed (1 PRD-invariant violation, 4 localization gaps, 1 runtime-empty-label bug, 1 hydration mismatch, TS debt), 2 new features (AI advisor copilot end-to-end bilingual; API discovery/health), AA contrast + VLM-driven polish. Lint + typecheck fully clean; all flows browser-verified; demo DB healthy.
+- Remaining candidates for next round: onboarding/consent first-run flow (the last unclaimed PRD-polish item); M2 payout queueing semantics; E07 portfolio-ceiling demo scenario; streaming advisor responses; advisor suggested-question personalization from live data; night-mode screenshots pass with VLM.
