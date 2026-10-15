@@ -36,6 +36,19 @@ function Bubble({ role, text }: { role: "user" | "assistant"; text: string }) {
   );
 }
 
+/** The streaming bubble — the answer arrives token-group by token-group
+ *  with a blinking caret. Never a fake shimmer over missing text. */
+function StreamingBubble({ text }: { text: string }) {
+  return (
+    <div className="flex w-full justify-start">
+      <div className="max-w-[85%] rounded-[10px] rounded-es-sm px-3.5 py-2.5 whitespace-pre-wrap break-words bg-card border border-border text-foreground">
+        <span className="type-body">{text}</span>
+        <span aria-hidden className="inline-block w-[7px] ml-0.5 align-baseline bg-accent-w animate-[advisor-caret_900ms_steps(1)_infinite]" style={{ height: "1em" }} />
+      </div>
+    </div>
+  );
+}
+
 export function AdvisorPanel() {
   const lang = useUi((s) => s.lang);
   const T = t(lang);
@@ -50,6 +63,8 @@ export function AdvisorPanel() {
   const [question, setQuestion] = useState("");
   const [thread, setThread] = useState<AdvisorTurn[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [streaming, setStreaming] = useState(false);
+  const [streamText, setStreamText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -73,7 +88,7 @@ export function AdvisorPanel() {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [thread, advisor.isPending, open]);
+  }, [thread, advisor.isPending, streamText, open]);
 
   useEffect(() => {
     if (open) textareaRef.current?.focus();
@@ -96,13 +111,80 @@ export function AdvisorPanel() {
   // The advisor does not exist in read-only mode — honest absence.
   if (m4 && !open) return null;
 
-  const ask = (raw: string) => {
+  // Ask via the SSE stream first — the answer types itself in. If the
+  // stream is unavailable or breaks, fall back to the non-streaming POST
+  // (which also carries the honest M4 503). Either way the same backend
+  // context and audit trail apply.
+  const ask = async (raw: string) => {
     const q = raw.trim();
-    if (!q || advisor.isPending) return;
+    if (!q || streaming || advisor.isPending) return;
     setError(null);
     const history = thread.slice(-6);
     setThread((prev) => [...prev, { role: "user", content: q }]);
     setQuestion("");
+
+    let streamed = false;
+    try {
+      const res = await fetch("/api/advisor/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q, lang, history }),
+      });
+      if (!res.ok || !res.body) throw new Error("stream unavailable");
+
+      setStreaming(true);
+      setStreamText("");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let full = "";
+      let sawDone = false;
+
+      read: while (true) {
+        const { value, done: readerDone } = await reader.read();
+        if (readerDone) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          let j: { delta?: string; done?: boolean; answer?: string; error?: string; detail?: string } | null = null;
+          try {
+            j = JSON.parse(line.slice(5));
+          } catch {
+            continue; // a malformed event never breaks the conversation
+          }
+          if (j?.error) {
+            reader.cancel().catch(() => {});
+            break read; // fall back to the non-streaming endpoint
+          }
+          if (j?.delta) {
+            full += j.delta;
+            setStreamText(full);
+          }
+          if (j?.done) {
+            sawDone = true;
+            // Trust the server's assembled answer (identical to `full`).
+            const finalAnswer = (j.answer ?? full).trim();
+            if (finalAnswer) {
+              streamed = true;
+              setThread((prev) => [...prev, { role: "assistant", content: finalAnswer }]);
+            }
+          }
+        }
+      }
+      if (!sawDone) throw new Error("incomplete stream");
+    } catch {
+      // fall through to the fallback below
+    } finally {
+      setStreaming(false);
+      setStreamText("");
+    }
+
+    if (streamed) return;
+
+    // Fallback: the non-streaming endpoint.
     advisor.mutate(
       { question: q, lang, history },
       {
@@ -171,9 +253,11 @@ export function AdvisorPanel() {
             {thread.map((m, i) => (
               <Bubble key={i} role={m.role} text={m.content} />
             ))}
-            {advisor.isPending && (
+            {/* Thinking → first delta arrives; then the answer types itself. */}
+            {(streaming || advisor.isPending) && streamText === "" && (
               <Bubble role="assistant" text={T.advisor.thinking} />
             )}
+            {streaming && streamText !== "" && <StreamingBubble text={streamText} />}
             {error && (
               <div className="type-caption text-danger-w text-center py-1">{error}</div>
             )}
@@ -201,7 +285,7 @@ export function AdvisorPanel() {
               <button
                 type="button"
                 onClick={() => ask(question)}
-                disabled={advisor.isPending || !question.trim()}
+                disabled={streaming || advisor.isPending || !question.trim()}
                 className="h-11 px-4 rounded-md grad-liquidity text-white type-body-strong press-scale elev-1 disabled:opacity-40 shrink-0"
               >
                 {T.advisor.send}

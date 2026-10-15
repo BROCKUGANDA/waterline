@@ -251,16 +251,18 @@ function GuardrailWatch({ reason }: { reason: string }) {
   const T = t(useUi((s) => s.lang));
   const lang = useUi((s) => s.lang);
   const { data: status } = useStatus();
-  const pending = useInvoices("pending");
+  // The full list (not just "pending"): disputed invoices live outside the
+  // pending filter, and the drill must reach them to RESOLVE.
+  const all = useInvoices("all");
   const dispute = useDisputeDrill();
   const [drillId, setDrillId] = useState<string>("");
 
   const g = status?.guardrails;
-  const pendingInvoices = pending.data?.invoices ?? [];
-  const disputedInvoices = pendingInvoices.filter((i) => i.verificationState === "disputed");
+  const allInvoices = all.data?.invoices ?? [];
+  const disputedInvoices = allInvoices.filter((i) => i.verificationState === "disputed");
   // The drill list: awaiting-confirmation invoices + already-disputed ones
   // (for the resolve action).
-  const drillable = pendingInvoices.filter((i) =>
+  const drillable = allInvoices.filter((i) =>
     i.verificationState === "deduped" || i.verificationState === "disputed" ||
     i.verificationState === "parsed" || i.verificationState === "received",
   );
@@ -321,18 +323,23 @@ function GuardrailWatch({ reason }: { reason: string }) {
                 <div
                   key={m.key}
                   className={cn(
-                    "rounded-md border p-2.5",
-                    m.breached ? "border-caution-w/40 bg-caution-w/5" : "border-border bg-surface-2/50"
+                    "relative rounded-md border p-2.5 overflow-hidden",
+                    m.breached ? "border-caution-w/50 bg-caution-w/10" : "border-border bg-surface-2/50"
                   )}
                   title={m.detail}
                 >
+                  {/* Breached cards get a leading accent bar — the eye lands
+                      on the crossed band first, before any number. */}
+                  {m.breached && (
+                    <span aria-hidden className="absolute start-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-caution-w" />
+                  )}
                   <div className="flex items-center justify-between gap-2">
-                    <span className="type-caption text-ink-600 truncate">{metricLabel(m.key)}</span>
+                    <span className={cn("type-caption truncate", m.breached ? "text-caution-w-dark font-semibold" : "text-ink-600")}>{metricLabel(m.key)}</span>
                     <StatusDot tone={m.breached ? "caution" : "success"} pulse={m.breached} />
                   </div>
                   <div className="mt-1 flex items-baseline justify-between gap-2">
-                    <span className={cn("type-body-strong", m.breached && "text-caution-w-dark")}>{fmtValue(m)}</span>
-                    <span className="type-caption text-ink-400 whitespace-nowrap">
+                    <span className={cn("type-body-strong", m.breached && "text-caution-w-dark font-bold")}>{fmtValue(m)}</span>
+                    <span className="type-caption text-ink-600 whitespace-nowrap">
                       {T.ops.guardrails.bandLabel} {fmtBand(m)}
                     </span>
                   </div>
@@ -340,16 +347,16 @@ function GuardrailWatch({ reason }: { reason: string }) {
               ))}
             </div>
             {anyBreached ? (
-              <div className="mt-3 rounded-md border border-caution-w/40 bg-caution-w/5 px-3 py-2.5">
+              <div className="mt-3 rounded-md border border-caution-w/50 bg-caution-w/10 px-3 py-2.5">
                 <div className="flex items-start gap-2">
                   <WlIcon name="alert" size={14} className="text-caution-w shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <div className="type-caption text-caution-w-dark font-semibold">{T.ops.guardrails.breached} — {T.ops.guardrails.autoApplied}</div>
+                    <div className="type-caption text-caution-w-dark font-bold">{T.ops.guardrails.breached} — {T.ops.guardrails.autoApplied}</div>
                     {g.lastAutoEpisode && status?.mode === "M1" && (
-                      <div className="type-caption text-ink-400 mt-0.5" dir="auto">{g.autoReason}</div>
+                      <div className="type-caption text-ink-600 mt-0.5" dir="auto">{g.autoReason}</div>
                     )}
                     {status?.mode !== "M1" && (
-                      <div className="type-caption text-ink-400 mt-0.5">{T.ops.guardrails.manualOverride}</div>
+                      <div className="type-caption text-ink-600 mt-0.5">{T.ops.guardrails.manualOverride}</div>
                     )}
                   </div>
                 </div>
@@ -379,7 +386,7 @@ function GuardrailWatch({ reason }: { reason: string }) {
               {drillable.length === 0 && <option value="" disabled>{T.ops.drill.selectNone}</option>}
               {drillable.map((i) => (
                 <option key={i.id} value={i.id}>
-                  {i.externalRef} · {i.buyer.buyerName} · {lang === "ar" ? formatAedAr(i.grossFils) : formatAed(i.grossFils)}
+                  {i.externalRef} · {i.buyer?.buyerName ?? "—"} · {lang === "ar" ? formatAedAr(i.grossFils) : formatAed(i.grossFils)}
                   {i.verificationState === "disputed" ? (lang === "ar" ? " — متنازع عليها" : " — disputed") : ""}
                 </option>
               ))}

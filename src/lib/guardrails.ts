@@ -157,6 +157,17 @@ export async function enforceGuardrails(): Promise<GuardrailEnforcementResult> {
   const evaluation = await evaluateGuardrailTelemetry();
 
   if (evaluation.breachedKeys.length === 0) {
+    // All clear: END the episode. A later re-crossing is a fresh breach and
+    // automation re-escalates. (A revert DURING a continuing breach — below —
+    // remains the operator's override for that episode.)
+    try {
+      await db.statusState.updateMany({
+        where: { id: "singleton", guardrailEpisodeJson: { not: null } },
+        data: { guardrailEpisodeJson: null },
+      });
+    } catch {
+      // Bookkeeping only — never let it fail the status read.
+    }
     return { evaluation, autoApplied: false, autoReason: null };
   }
 

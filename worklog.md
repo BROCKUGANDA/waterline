@@ -297,3 +297,58 @@ Work Log (continuation — see Task ID 7 IN PROGRESS above for the QA baseline a
 Stage Summary:
 - Round 7 complete: 1 architecture feature (multi-version rule-pack registry — M1 cautious delta wired through quote/accept-drift/replay-by-recorded-version/hint/overview/advisor/status publish; E07 portfolio ceiling demo scenario honest and complete), 2 UX features (forecast advisor deep-links with seeded pre-filled bilingual question + live sweep-yield strip on the forecast), 1 real pairing bug fixed (dark ink hierarchy inversion), and a full VLM-driven dark-mode refinement (money-accent token, filled slider tracks, chip/dot/gradient visibility) with light mode untouched.
 - Next-round candidates: streaming advisor responses; advisor deep-links from MORE surfaces (E07 outcome card → "ask why the book is at its ceiling"); sweep-the-projected-surplus autopilot forward planning; M1 auto-trigger from simulated guardrail telemetry (currently operator-applied only); pack promotion lifecycle UI (shadow diffs per PRD 3.3); Arabic numeral localization for the delta from/to values (currently Latin digits in AR ops panel).
+
+---
+Task ID: 8 (main agent) — IN PROGRESS
+Agent: main-orchestrator (Z.ai Code)
+Task: Round 8 — QA re-assessment, mobile FAB/hero fixes, automatic guardrails (PRD Part 8), streaming advisor, E07 deep-link, VLM styling pass.
+
+Work Log (partial — round in progress):
+- QA baseline: dev server up, lint clean, tsc clean, all API routes 200, ledger balanced (9 txns pristine). agent-browser sweep across all 5 views (EN + AR + dark + mobile 375px): 0 console errors, 0 warnings.
+- VLM screenshot review found 3 real issues + styling polish targets:
+  1. [HIGH] Mobile advisor FAB covered the "Ready to fund" AED 109,450.00 figure + "View all ›" chevron when scrolled (same bug class as Round 6's desktop FAB). FIXED: the advisor is now a raised circular dock button IN the mobile tab bar (5-col grid, ring-background cutout, dockLabel i18n EN+AR) — nothing floats over content anywhere anymore.
+  2. [HIGH] Mobile hero caption "du Pay balance · as of" stacked one-word-per-line beside the 34px money figure. FIXED: caption stacks BELOW the figure on phones (flex-col sm:flex-row), fades out during collapse.
+  3. [MEDIUM] Gauge headline "Available" ambiguous (wallet+invested ≠ spendable). Renamed "Total liquidity" (السيولة الكلية) with component breakdown beneath; runway day labels ink-400→ink-600; tier chips unified visual weight (gold now caution-w-soft/caution-w-dark with new light+dark token pairs).
+- FEATURE 1 — AUTOMATIC GUARDRAILS (PRD Part 8 "Transitions are automatic on guardrail breach... without waiting for a human"):
+  - New src/lib/guardrails.ts: 4 deterministic telemetry metrics with FIXED published warning bands — disputeRate (disputed/decided ≥20%), lossRate (failed/completed payouts ≥20%), coverage30d (wallet+recallable sweeps−30d obligations vs absolute floor), reconBreaks (ledger txns not summing to zero ≥1). enforceGuardrails(): escalates M0→M1 once per distinct breach episode (episode key = sorted breach set; operator revert during a continuing breach is a deliberate override; episode clears when all-clear so a fresh breach re-escalates); writes guardrail.triggered events per breached metric, guardrail_auto_m1 OperatorAction (actor system:guardrails), status.changed with automatic:true — all inside one transaction.
+  - Status GET: enforcement runs on the heartbeat (best-effort, never fails the endpoint — PRD "status must never fail"); publishes additive guardrails block (metrics/bands/units/breached + lastAutoEpisode + autoReason).
+  - New POST /api/invoices/[id]/dispute — the dispute drill (flag → disputed + buyer disputeCount+1 + invoice.disputed event; resolve → verified via buyer_portal + invoice.dispute_resolved; Idempotency-Key + mandatory reason + OperatorAction audit; settled invoices cannot be disputed; M4 blocked).
+  - Ops console: GUARDRAIL WATCH panel (4 metric cards with band labels; breached cards get tinted bg + 3px caution accent bar + bold amber value + pulsing dot — VLM-verified as the immediate focal point; auto-applied banner vs manual-override note) + DISPUTE DRILL card (select + flag/resolve button, two-person reason reused from the console).
+  - Activity feed: guardrail.triggered (permyriad→%, fils→AED), invoice.dispute_resolved, status.changed now appends "Applied automatically by the guardrails — no human waited on." for automatic transitions. Full Arabic mirrors. Icons/tones wired.
+  - VERIFIED END-TO-END: flag EFG-PO-88410 → 25% ≥ 20% band → status heartbeat auto-applied M1 (mode M1, activeVersion 2026.10.3-cautious.1, guardrail.triggered + status.changed automatic events in feed, operator audit row) → quote now 75% advance AED 17,812.50 same 4.2bps price → resolve via drill → 12.5% clear ("All guardrails clear — the operator may revert to M0" in UI) → M1 stays (recovery is human) → two-person revert → M0, no re-escalation → FRESH dispute re-escalates (autoTriggeredNow:true, new episode) → resolve + revert → pristine M0. Ledger balanced throughout; 0 console errors across the entire UI flow.
+  - Ops incident resolved: Prisma client staleness after schema push (guardrailEpisodeJson unknown argument) — root cause Turbopack caching node_modules; fixed by full .next removal + restart (also found the original dev-server tree survived earlier kills; port 3000 was held by agent-browser chrome utility process).
+- /api discovery route map now includes the dispute route (30 routes).
+
+Stage Summary (in progress):
+- Bugs B1-B5 fixed and VLM-verified; Feature 1 (automatic guardrails) complete end-to-end API+UI bilingual.
+- Next in this round: streaming advisor (SSE), E07 outcome-card advisor deep-link, final VLM styling pass, pristine DB reset, final verification.
+
+---
+Task ID: 8 (main agent) — continued
+Agent: main-orchestrator (Z.ai Code)
+
+Work Log (continuation):
+- FEATURE 2 — STREAMING ADVISOR (SSE):
+  - Extracted shared advisor lib (src/lib/advisor.ts): buildContext, buildSystemPrompt, parseAdvisorBody, auditAdvisorQa — byte-identical semantics between both endpoints.
+  - New POST /api/advisor/stream: SSE (data: {delta}|{done}|{error}); decodes the SDK's raw-SSE-byte chunks (Uint8Array, each carrying multiple data: lines), re-emits each content delta as its own event; audit written AFTER completion with true final length; honest mid-stream error event.
+  - Frontend advisor.tsx: ask() streams first — thinking bubble until first delta, then a StreamingBubble that grows live with a blinking terminal-caret (steps(1) keyframe, never a fade); graceful fallback to the non-streaming POST if the stream is unavailable/broken/incomplete; composer disabled while streaming. Verified EN (fee question: 132 deltas, 553 chars, done event) + AR (treasury floor answer, VLM-passed RTL/content); advisor.qa audit events present for every streamed answer; 0 console errors.
+- FEATURE 3 — E07 OUTCOME-CARD ADVISOR DEEP-LINK: rejection outcome cards now offer "Ask the advisor why — and what changes it" (accent underlined affordance + sr-only hint, i18n EN+AR askWhy/askWhyHint) for advisorable reason codes (E_PORTFOLIO, E_ENTITY_CAP, E_BUYER_CAP, E_SECTOR_CAP, E_MIN_SIZE); click → askAdvisor(seed) opens the sheet with a localized question naming the reason code — pre-filled, never auto-sent. VERIFIED on the E_MIN_SIZE rejection (ESS-INV-2199): link renders in the neutral outcome card, advisor opened pre-filled "Why was this invoice declined with E_MIN_SIZE, and what changes it?", streamed answer arrived (277 chars), 0 errors.
+
+---
+Task ID: 8 (main agent) — COMPLETED
+Agent: main-orchestrator (Z.ai Code)
+Task: Round 8 — QA re-assessment, mobile FAB/hero fixes, automatic guardrails (PRD Part 8), streaming advisor (SSE), E07 deep-link, VLM styling pass, pristine reset + final verification.
+
+Work Log (final continuation):
+- STYLING PASS (VLM-driven, multiple review rounds):
+  - Guardrail watch panel: breached metric cards strengthened — bg-caution-w/10 fill, 3px amber accent bar on the leading edge, bold amber value, pulsing dot, band label ink-600; breach banner tint+weight raised (VLM verdict: breached card is now the immediate focal point; banner readable).
+  - Invoice cards: hover now elevates AND lifts (-translate-y-0.5, 200ms) with border-color shift; framer-motion entrance moved to a wrapper div so the CSS hover transform is never overridden by inline motion styles.
+  - Mobile main padding pb-24→pb-28 — at max scroll the last content row clears the raised advisor dock with margin (measured: protrusion 75px < padding 112px).
+  - Escrow review verdicts: dispute button already outlined (VLM misread); milestone approve-during-review is the designed buyer-approval path (route state machine verified: pending|in_review|met → approve).
+- FINAL VERIFICATION: lint clean; tsc clean (project files — only pre-existing examples/skills exclusions); demo DB reset to pristine (M0, base pack, wallet 12,328,509 fils, 9 txns balanced, guardrails all clear, no episode); full browser sweep — fresh onboarding walked in AR (3 steps + persistence), all 5 views EN/AR + dark + mobile 375px with ZERO console errors/warnings; VLM final verdict on mobile home: HIGH QUALITY / PRODUCTION READY (hero caption one line; 5-tab dock bar; nothing covering money figures); AR dark ops console VLM PASS (RTL flawless, contrast strong).
+- Screenshots: download/qa-r9-*.png (baseline cash dark/invoices/ops/mobile, fixed mobile cash/top/bottom, guardrail panel ×3 + clear state, advisor streamed EN/AR, E07 deeplink answer, escrow light, invoices final, mobile tabbar, final onboarding/ops-ar/mobile-ar).
+
+Stage Summary:
+- Round 8 complete: 5 bugs fixed (mobile FAB covering money + View-all — now an in-bar advisor dock; mobile hero caption stacking; gauge "Available" ambiguity → "Total liquidity"; runway label contrast; tier chip weight parity + new caution-w-soft/dark tokens light+dark), 3 features added (AUTOMATIC GUARDRAILS per PRD Part 8 — 4 deterministic telemetry metrics with fixed published bands, auto-M0→M1 escalation once per breach episode with full event/audit trail, published on /api/status, ops guardrail-watch panel + dispute drill POST /api/invoices/{id}/dispute, verified end-to-end twice including fresh-episode re-escalation and two-person recovery; STREAMING ADVISOR via SSE /api/advisor/stream — shared lib, 132-delta streams, terminal-caret streaming bubble, graceful fallback, EN+AR verified with audit events; E07/rejection outcome-card advisor deep-link pre-filling a reason-code-named question), VLM-driven styling polish across guardrail panel, invoice hover, mobile spacing.
+- PRD Part 8's "automatic on guardrail breach" sentence is now literally implemented and demoable: flag a dispute via the drill → the next status heartbeat applies M1 with the cautious pack — no human waited on.
+- Remaining candidates for next round: sweep-the-projected-surplus autopilot forward-planning; M2 auto-trigger from a breaker-open simulation (currently M2 is operator-applied; the same guardrail engine could watch breaker states); pack promotion lifecycle UI (shadow diffs per PRD 3.3); night-mode VLM pass on the advisor sheet; E07 scenario scripted as a one-click ops drill (currently requires funding invoices first).

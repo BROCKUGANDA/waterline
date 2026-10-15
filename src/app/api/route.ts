@@ -27,6 +27,7 @@ const ROUTES: RouteDescriptor[] = [
   { path: "/api/invoices/{id}", method: "GET", purpose: "Invoice detail with offers, latest decision, payout", moneyMoving: false },
   { path: "/api/invoices/{id}/quote", method: "GET", purpose: "Deterministic quote — append-only decision before any outcome", moneyMoving: false },
   { path: "/api/invoices/{id}/confirm", method: "POST", purpose: "Buyer-portal confirmation (deduped → verified)", moneyMoving: false },
+  { path: "/api/invoices/{id}/dispute", method: "POST", purpose: "Dispute drill — flag or resolve; crosses the dispute-rate guardrail honestly", moneyMoving: false },
   { path: "/api/invoices/{id}/settle", method: "POST", purpose: "Simulate buyer settlement; releases reserve", moneyMoving: true },
   { path: "/api/offers/{id}/accept", method: "POST", purpose: "Accept an offer; funds the advance, creates payout", moneyMoving: true },
   { path: "/api/payouts/{id}", method: "GET", purpose: "4-stage payout pipeline (Accepted/Reserved/Sent/Settled)", moneyMoving: false },

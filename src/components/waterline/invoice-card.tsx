@@ -58,14 +58,16 @@ export function InvoiceCard({
     invoice.payoutState !== "settled";
 
   return (
-    <motion.button
-      type="button"
+    <motion.div
       layout
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.24, ease: [0.2, 0, 0, 1], delay: Math.min(index * 0.02, 0.16) }}
+    >
+    <button
+      type="button"
       onClick={() => onOpen(invoice.id)}
-      className="w-full text-start grad-lift rounded-[10px] border border-border hover:border-ink-200 dark:hover:border-ink-600 p-4 elev-1 hover:elev-2 transition-shadow press-scale focus-visible:border-accent-w"
+      className="w-full text-start grad-lift rounded-[10px] border border-border hover:border-ink-200 dark:hover:border-ink-600 p-4 elev-1 hover:elev-2 hover:-translate-y-0.5 transition-[box-shadow,transform,border-color] duration-200 press-scale focus-visible:border-accent-w"
       aria-label={`${invoice.externalRef} — ${invoice.buyer?.buyerName ?? ""}`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -126,7 +128,8 @@ export function InvoiceCard({
           <WlIcon name={stateIcon[state] ?? "invoice"} size={16} className="text-ink-400" />
         )}
       </div>
-    </motion.button>
+    </button>
+    </motion.div>
   );
 }
 
