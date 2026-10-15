@@ -287,6 +287,11 @@ model StatusState {
   killSwitchesJson String  @default("{\"global\":false,\"dynamicDiscounting\":false,\"escrow\":false,\"treasury\":false,\"tenant\":false,\"buyer\":false,\"sector\":false,\"rail\":false}")
   breakersJson    String   @default("{\"dupay\":\"closed\",\"aani\":\"closed\",\"openfinance\":\"closed\",\"einvoice\":\"closed\",\"custodian\":\"closed\",\"notification\":\"closed\"}")
   message         String?
+  // Guardrail automation bookkeeping (PRD Part 8 "automatic on guardrail
+  // breach"): the episode key of the breach set that last auto-applied M1,
+  // so automation escalates once per distinct episode and a human revert
+  // within the same episode is a deliberate override, not a fight.
+  guardrailEpisodeJson String?
   updatedAt       DateTime @updatedAt
 }
 

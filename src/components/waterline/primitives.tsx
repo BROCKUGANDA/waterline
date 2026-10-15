@@ -77,12 +77,14 @@ export function SectionLabel({ children, className }: { children: React.ReactNod
   return <div className={cn("type-label text-ink-400", className)}>{children}</div>;
 }
 
-/** Tier chip for buyer tiers. */
+/** Tier chip for buyer tiers — every tier gets the SAME visual weight
+ *  (soft tinted fill + matching border + darkened text); only the hue
+ *  varies by tier. No tier may look "more real" than another. */
 export function TierChip({ tier }: { tier: string }) {
   const styles: Record<string, string> = {
     platinum: "bg-accent-w-soft text-accent-w-dark border-accent-w/30",
-    gold: "bg-caution-w/10 text-caution-w border-caution-w/30",
-    silver: "bg-surface-2 text-ink-600 border-ink-200 dark:border-ink-400",
+    gold: "bg-caution-w-soft text-caution-w-dark border-caution-w/40",
+    silver: "bg-surface-2 text-ink-600 border-ink-200 dark:text-ink-600 dark:border-ink-400",
     bronze: "bg-[#E8DCC8] text-[#7A5C2E] border-[#C9B48A] dark:bg-[#3A3225] dark:text-[#D9C9A5]",
     unrated: "bg-surface-2 text-ink-400 border-ink-200 border-dashed dark:text-ink-600 dark:border-ink-400",
   };

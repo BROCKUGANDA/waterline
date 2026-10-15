@@ -102,6 +102,29 @@ export function useConfirmInvoice() {
   });
 }
 
+/** Dispute drill (ops console, PRD Part 8): flag an invoice disputed or
+ *  resolve it. Crossing the dispute-rate band auto-applies M1 on the next
+ *  status heartbeat — the guardrails are published on /api/status. */
+export function useDisputeDrill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { invoiceId: string; reason: string; resolve?: boolean }) =>
+      api.post<{ invoice: InvoiceDto; resolved: boolean }>(
+        `/api/invoices/${vars.invoiceId}/dispute`,
+        { reason: vars.reason, resolve: vars.resolve ?? false },
+        { idemScope: `dispute:${vars.invoiceId}:${vars.resolve ? "resolve" : "flag"}` },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["invoice"] });
+      qc.invalidateQueries({ queryKey: ["overview"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["status"] });
+      qc.invalidateQueries({ queryKey: ["audit"] });
+    },
+  });
+}
+
 export function useSubmitInvoice() {
   const qc = useQueryClient();
   return useMutation({

@@ -188,11 +188,28 @@ export function renderActivityEventAr(ev: ActivityEventDto): EventCopy {
     }
     case "status.changed": {
       const mode = str("mode") ?? "M0";
+      const automatic = p.automatic === true;
       return {
         title: "تغيّرت حالة النظام",
-        detail: `الوضع ${mode}${str("message") ? ` — ${str("message")}` : ""}${str("reason") ? ` (${str("reason")})` : ""}.`,
+        detail: `الوضع ${mode}${str("message") ? ` — ${str("message")}` : ""}${str("reason") ? ` (${str("reason")})` : ""}.${automatic ? " طُبّق آلياً عبر الحواجز الوقائية — دون انتظار إنسان." : ""}`,
       };
     }
+    case "guardrail.triggered": {
+      const unit = str("unit") ?? "permyriad";
+      const fmt = (v: number | null) =>
+        v === null ? null : unit === "permyriad" ? `٪${(v / 100).toFixed(0)}` : unit === "fils" ? formatAedAr(v) : String(v);
+      const valueLabel = fmt(num("value"));
+      const bandLabel = fmt(num("band"));
+      return {
+        title: "عُبِر حاجز وقائي",
+        detail: `${str("guardrail") ?? "حاجز وقائي"} تجاوز نطاق التحذير (${valueLabel ?? "—"} مقابل ${bandLabel ?? "—"}) — طُبّق الوضع الحذر M1 آلياً؛ تُشدَّد الحدود والسعر لا يتغير.`,
+      };
+    }
+    case "invoice.dispute_resolved":
+      return {
+        title: "حُلّ نزاع فاتورة",
+        detail: `${ref()} أعاد المشتري تأكيدها — استُعيد التحقق ويمكن استئناف التمويل.`,
+      };
     case "consent.granted":
       return {
         title: "مُنحت موافقة",

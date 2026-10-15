@@ -32,6 +32,8 @@
   /* ── Semantics ──────────────────────────────────────────────────────── */
   --wl-success: #1E8E5A;
   --wl-caution: #B8860B;
+  --wl-caution-dark: #7A5C08;
+  --wl-caution-soft: #F7EDD8;
   --wl-danger: #C23B22;
   --wl-escrow: #6B4FA8;
   --wl-treasury: #0F7F8C;
@@ -115,6 +117,8 @@
 
   --wl-success: #2FA36E;
   --wl-caution: #D9A521;
+  --wl-caution-dark: #F2CE7A;
+  --wl-caution-soft: #332A14;
   --wl-danger: #E05A44;
   --wl-escrow: #9B7FD0;
   --wl-treasury: #3BA8B5;
@@ -177,6 +181,8 @@
 
   --color-success-w: var(--wl-success);
   --color-caution-w: var(--wl-caution);
+  --color-caution-w-dark: var(--wl-caution-dark);
+  --color-caution-w-soft: var(--wl-caution-soft);
   --color-danger-w: var(--wl-danger);
   --color-escrow-w: var(--wl-escrow);
   --color-treasury-w: var(--wl-treasury);

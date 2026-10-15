@@ -61,6 +61,34 @@ function RailButton({
   );
 }
 
+function MobileTabButton({
+  n, active, lang, onSelect,
+}: {
+  n: { view: View; icon: WlIconName; label: (l: Lang) => string };
+  active: boolean;
+  lang: Lang;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={active ? "page" : undefined}
+      className="relative h-16 flex flex-col items-center justify-center gap-1 press-scale"
+    >
+      {active && (
+        <motion.span
+          layoutId="mobile-tab"
+          className="absolute top-0 inset-x-4 h-[2px] grad-liquidity rounded-full"
+          transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}
+        />
+      )}
+      <WlIcon name={n.icon} size={22} filled={active} className={active ? "text-accent-w" : "text-ink-400"} />
+      <span className={cn("type-caption", active ? "text-accent-w font-semibold" : "text-ink-400")}>{n.label(lang)}</span>
+    </button>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { view, setView, lang, toggleLang, railCollapsed, toggleRail, setAdvisorOpen } = useUi();
   // The footer names the pack that decides right now — published on
@@ -229,34 +257,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* First-run onboarding & consent tour (PRD 4.1) — once per browser */}
       <OnboardingFlow />
 
-      {/* Mobile bottom bar — four tabs, labels always visible */}
+      {/* Mobile bottom bar — four tabs + a centred advisor dock. The advisor
+          lives IN the bar (not a floating FAB): nothing may ever float over
+          money figures (PRD 11.1 state-before-action). */}
       <nav
         className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background/95 backdrop-blur border-t border-border pb-[env(safe-area-inset-bottom)]"
         aria-label="Primary mobile"
       >
-        <div className="grid grid-cols-4">
-          {NAV.map((n) => {
-            const active = view === n.view;
-            return (
-              <button
-                key={n.view}
-                type="button"
-                onClick={() => setView(n.view)}
-                aria-current={active ? "page" : undefined}
-                className="relative h-16 flex flex-col items-center justify-center gap-1 press-scale"
-              >
-                {active && (
-                  <motion.span
-                    layoutId="mobile-tab"
-                    className="absolute top-0 inset-x-4 h-[2px] grad-liquidity rounded-full"
-                    transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}
-                  />
-                )}
-                <WlIcon name={n.icon} size={22} filled={active} className={active ? "text-accent-w" : "text-ink-400"} />
-                <span className={cn("type-caption", active ? "text-accent-w font-semibold" : "text-ink-400")}>{n.label(lang)}</span>
-              </button>
-            );
-          })}
+        <div className="grid grid-cols-5 items-end relative">
+          {NAV.slice(0, 2).map((n) => (
+            <MobileTabButton key={n.view} n={n} active={view === n.view} lang={lang} onSelect={() => setView(n.view)} />
+          ))}
+          {/* Advisor dock — raised circular gradient button, centred */}
+          <div className="relative flex justify-center">
+            <button
+              type="button"
+              onClick={() => setAdvisorOpen(true)}
+              aria-label={t(lang).advisor.title}
+              aria-haspopup="dialog"
+              className="absolute -top-5 h-12 w-12 rounded-full grad-liquidity text-white elev-2 press-scale flex items-center justify-center ring-4 ring-background transition-transform hover:scale-105 focus-visible:scale-105"
+            >
+              <WlIcon name="advisor" size={22} />
+            </button>
+            <span className="type-caption text-ink-400 pb-2 pt-7">{t(lang).advisor.dockLabel}</span>
+          </div>
+          {NAV.slice(2).map((n) => (
+            <MobileTabButton key={n.view} n={n} active={view === n.view} lang={lang} onSelect={() => setView(n.view)} />
+          ))}
         </div>
       </nav>
     </div>

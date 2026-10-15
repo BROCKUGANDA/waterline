@@ -49,17 +49,25 @@ function BalanceHeader({ walletFils, asOf }: { walletFils: number; asOf: string 
       </div>
       <div className="h-full flex flex-col justify-center px-5">
         <SectionLabel>{T.cash.availableNow}</SectionLabel>
-        <div className="flex items-baseline gap-3 mt-1">
+        <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3 mt-1">
           <span
             className="money type-display text-accent-w-deep dark:text-accent-money"
             style={{ fontSize: displaySize, lineHeight: 1.1, transition: "font-size 100ms linear" }}
           >
             {lang === "ar" ? formatAedAr(walletFils) : formatAed(walletFils)}
           </span>
-          <span className="type-caption text-ink-400" style={{ opacity: 1 - p * 0.4 }}>
-            {T.cash.walletBalance} · {T.common.asOf}{" "}
-            {new Date(asOf).toLocaleTimeString(lang === "ar" ? "ar-AE" : "en-AE", { hour: "2-digit", minute: "2-digit" })}
-          </span>
+          {/* On phones this caption stacks BELOW the figure — a side-by-side
+              baseline squeezes it into a one-word-per-line column. It fades
+              out with the collapse (the collapsed header is money-only). */}
+          {p < 0.85 && (
+            <span
+              className="type-caption text-ink-400 whitespace-nowrap"
+              style={{ opacity: 1 - p * 0.4 }}
+            >
+              {T.cash.walletBalance} · {T.common.asOf}{" "}
+              {new Date(asOf).toLocaleTimeString(lang === "ar" ? "ar-AE" : "en-AE", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
         </div>
         {p < 0.7 && (
           <div className="type-caption text-ink-400 mt-1.5" style={{ opacity: 1 - p / 0.7 }}>

@@ -13,6 +13,7 @@ import { DEMO_TENANT, errors, ok, readJson, requireIdempotencyKey } from "@/lib/
 import { releaseQueuedPayouts } from "@/lib/payout-queue";
 import { ensureSeed } from "@/lib/seed";
 import { packForMode, CAUTIOUS_DELTA_SUMMARY, CAUTIOUS_PACK_VERSION } from "@/lib/rulepacks";
+import { enforceGuardrails, guardrailsView, type GuardrailsView } from "@/lib/guardrails";
 import type { StatusState } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -97,6 +98,10 @@ interface StatusView {
     description: string;
     smeSees: string;
   }[];
+  /** Automatic guardrails (PRD Part 8) — live telemetry + the last
+   *  auto-escalation record. Advisory data: the bands are fixed published
+   *  values, never model output. */
+  guardrails: GuardrailsView | null;
 }
 
 function safeRecord(json: string): Record<string, unknown> {
@@ -117,6 +122,7 @@ function viewFrom(st: StatusState): StatusView {
     updatedAt: st.updatedAt.toISOString(),
     modeCatalog: MODE_CATALOG.map((m) => ({ ...m })),
     rulePacks: rulePacksView(st.mode),
+    guardrails: null, // filled by the GET handler after evaluation
   };
 }
 
@@ -129,6 +135,7 @@ function hardcodedM0(): StatusView {
     updatedAt: new Date().toISOString(),
     modeCatalog: MODE_CATALOG.map((m) => ({ ...m })),
     rulePacks: rulePacksView("M0"),
+    guardrails: null,
   };
 }
 
@@ -162,9 +169,26 @@ export async function GET(): Promise<Response> {
   // error we fall back to the declared hardcoded M0 state.
   try {
     await ensureSeed();
+    // Automatic guardrails (PRD Part 8): escalate M0 → M1 when a warning
+    // band is crossed — once per distinct breach episode. Best-effort by
+    // design: a telemetry failure must never take the status endpoint down.
+    let enforcement: Awaited<ReturnType<typeof enforceGuardrails>> | null = null;
+    try {
+      enforcement = await enforceGuardrails();
+    } catch (e) {
+      console.error("[api/status] guardrail enforcement", e);
+    }
     const st = await upsertReadStatus();
-    if (st) return ok(viewFrom(st));
-    return ok(hardcodedM0());
+    if (!st) return ok(hardcodedM0());
+    const view = viewFrom(st);
+    if (enforcement) {
+      try {
+        view.guardrails = await guardrailsView(enforcement.evaluation, enforcement.autoApplied, enforcement.autoReason);
+      } catch (e) {
+        console.error("[api/status] guardrail view", e);
+      }
+    }
+    return ok(view);
   } catch {
     return ok(hardcodedM0());
   }

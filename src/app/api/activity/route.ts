@@ -202,9 +202,25 @@ function renderEvent(ev: AppEvent, ctx: Enrichment): RenderedEvent {
     case "status.changed": {
       title = "System status changed";
       const mode = str("mode") ?? "M0";
-      detail = `Mode ${mode}${str("message") ? ` — ${str("message")}` : ""}${str("reason") ? ` (${str("reason")})` : ""}.`;
+      const automatic = p.automatic === true;
+      detail = `Mode ${mode}${str("message") ? ` — ${str("message")}` : ""}${str("reason") ? ` (${str("reason")})` : ""}.${automatic ? " Applied automatically by the guardrails — no human waited on." : ""}`;
       break;
     }
+    case "guardrail.triggered": {
+      title = "Guardrail crossed";
+      // Permyriad metrics read as percent; fils read as dirhams.
+      const unit = str("unit") ?? "permyriad";
+      const fmt = (v: number | null) =>
+        v === null ? null : unit === "permyriad" ? `${(v / 100).toFixed(0)}%` : unit === "fils" ? formatAed(v) : String(v);
+      const valueLabel = fmt(num("value"));
+      const bandLabel = fmt(num("band"));
+      detail = `${str("guardrail") ?? "A guardrail"} crossed its warning band (${valueLabel ?? "—"} vs band ${bandLabel ?? "—"}) — M1 applied automatically; limits tighten, pricing unchanged.`;
+      break;
+    }
+    case "invoice.dispute_resolved":
+      title = "Invoice dispute resolved";
+      detail = `${ref()} re-confirmed by the buyer — verification restored, funding can resume.`;
+      break;
     case "consent.granted":
       title = "Consent granted";
       detail = `${str("purpose") ?? "A consent"} granted — scoped, one purpose per toggle.`;

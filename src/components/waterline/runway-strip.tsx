@@ -123,8 +123,8 @@ export function RunwayStrip({ obligations, walletFils }: { obligations: Obligati
           </div>
         ))}
 
-        {/* day labels */}
-        <div className="absolute inset-x-3 bottom-1 flex justify-between type-label text-ink-400 pointer-events-none">
+        {/* day labels — ink-600: readable in dark mode, not just AA-technically */}
+        <div className="absolute inset-x-3 bottom-1 flex justify-between type-label text-ink-600 dark:text-ink-600 pointer-events-none">
           <span>{lang === "ar" ? "اليوم" : "today"}</span>
           <span>+30</span>
           <span>+60</span>

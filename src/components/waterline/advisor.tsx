@@ -121,21 +121,9 @@ export function AdvisorPanel() {
 
   return (
     <>
-      {/* Floating entry point — mobile only; desktop uses the rail launcher */}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={T.advisor.title}
-        className={cn(
-          "md:hidden fixed z-40 h-14 w-14 rounded-full grad-liquidity text-white elev-2 press-scale",
-          "flex items-center justify-center",
-          "bottom-[calc(env(safe-area-inset-bottom)+5.25rem)]",
-          lang === "ar" ? "left-4" : "right-4",
-          "transition-transform hover:scale-105 focus-visible:scale-105"
-        )}
-      >
-        <WlIcon name="advisor" size={24} />
-      </button>
+      {/* Mobile entry point lives in the bottom tab bar as a raised dock
+          (app-shell) — a floating FAB would cover money figures. Desktop uses
+          the rail launcher. Nothing floats over content anywhere. */}
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent

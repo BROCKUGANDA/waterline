@@ -75,7 +75,10 @@ export function LiquidityGauge({
         ))}
       </div>
 
-      {/* Read-outs */}
+      {/* Read-outs — the headline is TOTAL liquidity (wallet + invested);
+          the spendable wallet and invested components sit directly beneath,
+          each with its own figure. "Available" would overstate — invested
+          money must be recalled first (T+1, minimum size). */}
       <div className="flex flex-col justify-between py-0.5 min-w-0">
         <div>
           <div className="type-label text-ink-400">{T.cash.gauge.available}</div>

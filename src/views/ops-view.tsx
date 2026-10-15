@@ -9,13 +9,14 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { useStatus, useOperatorStatus, useDecisions, useReplayDecision, useAudit, useConsents, useRevokeConsent, useGrantConsent } from "@/hooks/waterline";
+import { useStatus, useOperatorStatus, useDecisions, useReplayDecision, useAudit, useConsents, useRevokeConsent, useGrantConsent, useInvoices, useDisputeDrill } from "@/hooks/waterline";
 import { Money } from "@/components/waterline/money";
 import { SectionLabel, StatusDot, SkeletonCard, CopyRef } from "@/components/waterline/primitives";
 import { WlIcon } from "@/components/waterline/icons";
 import { t } from "@/lib/i18n";
 import { useUi } from "@/stores/ui";
-import type { DecisionDto } from "@/lib/types";
+import type { DecisionDto, StatusDto } from "@/lib/types";
+import { formatAed, formatAedAr } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 const KILL_SWITCHES: { name: string; label: string }[] = [
@@ -238,7 +239,175 @@ function StatusTab() {
         />
         <div className="type-caption text-ink-400 mt-1.5">{T.ops.operatorActions}</div>
       </div>
+
+      {/* guardrail watch + dispute drill */}
+      <GuardrailWatch reason={reason} />
     </div>
+  );
+}
+
+/* ── Guardrail watch (PRD Part 8) + the dispute drill ──────────────────── */
+function GuardrailWatch({ reason }: { reason: string }) {
+  const T = t(useUi((s) => s.lang));
+  const lang = useUi((s) => s.lang);
+  const { data: status } = useStatus();
+  const pending = useInvoices("pending");
+  const dispute = useDisputeDrill();
+  const [drillId, setDrillId] = useState<string>("");
+
+  const g = status?.guardrails;
+  const pendingInvoices = pending.data?.invoices ?? [];
+  const disputedInvoices = pendingInvoices.filter((i) => i.verificationState === "disputed");
+  // The drill list: awaiting-confirmation invoices + already-disputed ones
+  // (for the resolve action).
+  const drillable = pendingInvoices.filter((i) =>
+    i.verificationState === "deduped" || i.verificationState === "disputed" ||
+    i.verificationState === "parsed" || i.verificationState === "received",
+  );
+  const selected = drillable.find((i) => i.id === drillId) ?? null;
+  const isSelectedDisputed = selected?.verificationState === "disputed";
+
+  const fmtValue = (m: NonNullable<StatusDto["guardrails"]>["metrics"][number]): string => {
+    if (m.unit === "permyriad") return `${(m.value / 100).toFixed(1)}%`;
+    if (m.unit === "fils") {
+      const aed = lang === "ar" ? formatAedAr(Math.abs(m.value)) : formatAed(Math.abs(m.value));
+      return m.value >= 0 ? T.ops.guardrails.aboveFloor(aed) : T.ops.guardrails.belowFloor(aed);
+    }
+    return String(m.value);
+  };
+  const fmtBand = (m: NonNullable<StatusDto["guardrails"]>["metrics"][number]): string =>
+    m.unit === "permyriad" ? `${(m.band / 100).toFixed(0)}%` : m.unit === "fils" ? "≥ 0" : "0";
+
+  const metricLabel = (key: string): string =>
+    key === "disputeRate" ? T.ops.guardrails.disputeRate
+    : key === "lossRate" ? T.ops.guardrails.lossRate
+    : key === "coverage30d" ? T.ops.guardrails.coverage30d
+    : T.ops.guardrails.reconBreaks;
+
+  const runDrill = () => {
+    if (!selected) return;
+    if (!reason || reason.trim().length < 3) {
+      toast.error(T.ops.confirmTwoPerson);
+      return;
+    }
+    dispute.mutate(
+      { invoiceId: selected.id, reason, resolve: isSelectedDisputed },
+      {
+        onSuccess: (res) => {
+          toast.success(res.resolved ? T.ops.drill.resolvedToast : T.ops.drill.flagged, { duration: 5000 });
+          setDrillId("");
+        },
+        onError: (e) => toast.error(e instanceof Error ? e.message : T.errors.generic),
+      },
+    );
+  };
+
+  const anyBreached = g?.metrics.some((m) => m.breached) ?? false;
+
+  return (
+    <>
+      <div className="rounded-[10px] border border-border bg-card p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <div>
+            <SectionLabel>{T.ops.guardrails.title}</SectionLabel>
+            <div className="type-caption text-ink-400 mt-0.5">{T.ops.guardrails.subtitle}</div>
+          </div>
+          <WlIcon name="alert" size={16} className={anyBreached ? "text-caution-w" : "text-ink-400"} />
+        </div>
+        {g ? (
+          <>
+            <div className="mt-3 grid sm:grid-cols-2 gap-2">
+              {g.metrics.map((m) => (
+                <div
+                  key={m.key}
+                  className={cn(
+                    "rounded-md border p-2.5",
+                    m.breached ? "border-caution-w/40 bg-caution-w/5" : "border-border bg-surface-2/50"
+                  )}
+                  title={m.detail}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="type-caption text-ink-600 truncate">{metricLabel(m.key)}</span>
+                    <StatusDot tone={m.breached ? "caution" : "success"} pulse={m.breached} />
+                  </div>
+                  <div className="mt-1 flex items-baseline justify-between gap-2">
+                    <span className={cn("type-body-strong", m.breached && "text-caution-w-dark")}>{fmtValue(m)}</span>
+                    <span className="type-caption text-ink-400 whitespace-nowrap">
+                      {T.ops.guardrails.bandLabel} {fmtBand(m)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {anyBreached ? (
+              <div className="mt-3 rounded-md border border-caution-w/40 bg-caution-w/5 px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <WlIcon name="alert" size={14} className="text-caution-w shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="type-caption text-caution-w-dark font-semibold">{T.ops.guardrails.breached} — {T.ops.guardrails.autoApplied}</div>
+                    {g.lastAutoEpisode && status?.mode === "M1" && (
+                      <div className="type-caption text-ink-400 mt-0.5" dir="auto">{g.autoReason}</div>
+                    )}
+                    {status?.mode !== "M1" && (
+                      <div className="type-caption text-ink-400 mt-0.5">{T.ops.guardrails.manualOverride}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="type-caption text-ink-400 mt-3">{T.ops.guardrails.clearNote}</div>
+            )}
+          </>
+        ) : (
+          <div className="type-caption text-ink-400 mt-3">…</div>
+        )}
+      </div>
+
+      {/* dispute drill — the honest path across the band */}
+      <div className="rounded-[10px] border border-border bg-card p-4">
+        <SectionLabel>{T.ops.drill.title}</SectionLabel>
+        <div className="type-caption text-ink-400 mt-0.5">{T.ops.drill.subtitle}</div>
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1 min-w-0">
+            <select
+              value={drillId}
+              onChange={(e) => setDrillId(e.target.value)}
+              aria-label={T.ops.drill.select}
+              className="w-full h-10 rounded-md border border-border bg-card px-3 type-body outline-none focus:border-caution-w appearance-none"
+            >
+              <option value="">{T.ops.drill.select}…</option>
+              {drillable.length === 0 && <option value="" disabled>{T.ops.drill.selectNone}</option>}
+              {drillable.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.externalRef} · {i.buyer.buyerName} · {lang === "ar" ? formatAedAr(i.grossFils) : formatAed(i.grossFils)}
+                  {i.verificationState === "disputed" ? (lang === "ar" ? " — متنازع عليها" : " — disputed") : ""}
+                </option>
+              ))}
+            </select>
+            <WlIcon name="invoice" size={14} className="absolute end-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+          </div>
+          <button
+            type="button"
+            onClick={runDrill}
+            disabled={!selected || dispute.isPending}
+            className={cn(
+              "h-10 px-4 rounded-md type-caption font-semibold press-scale border shrink-0",
+              isSelectedDisputed
+                ? "bg-success-w text-white border-success-w"
+                : "bg-card border-border hover:border-caution-w/50 hover:text-caution-w",
+              "disabled:opacity-50 disabled:pointer-events-none"
+            )}
+          >
+            {dispute.isPending ? "…" : isSelectedDisputed ? T.ops.drill.resolve : T.ops.drill.flag}
+          </button>
+        </div>
+        {disputedInvoices.length > 0 && (
+          <div className="type-caption text-ink-400 mt-2">
+            {disputedInvoices.map((i) => i.externalRef).join(", ")}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
