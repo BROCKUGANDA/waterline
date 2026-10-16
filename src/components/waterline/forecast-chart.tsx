@@ -170,8 +170,9 @@ export function ForecastChart({ data, isLoading }: { data: ForecastDto | undefin
       </div>
 
       <div className="rounded-[10px] border border-border bg-card p-4 pt-3">
-        {/* Headline figures */}
-        <div className="grid grid-cols-3 gap-2 mb-1">
+        {/* Headline figures — stacked below sm: the never-wrapping money
+            figures need their full width on narrow phones (PRD 11.4) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2 mb-1">
           <div>
             <SectionLabel>{F.today}</SectionLabel>
             <Money fils={data.startFils} size="body" animate={false} />
@@ -300,7 +301,7 @@ export function ForecastChart({ data, isLoading }: { data: ForecastDto | undefin
             </div>
           </div>
         )}
-        <div className="mt-2 grid grid-cols-3 gap-2">
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div className="flex items-center justify-between rounded-md border border-border px-2.5 py-1.5">
             <span className="type-caption text-ink-400">{F.totalIn}</span>
             <Money fils={data.summary.totalInFils} size="caption" colorize="success" animate={false} whole={false} />

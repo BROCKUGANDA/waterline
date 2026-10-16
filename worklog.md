@@ -472,3 +472,42 @@ Goals this round: (a) QA baseline, (b) M3 auto-degrade, (c) canary phase, (d) ma
   3. M3 review clock: the catalog's "expected review time" as an operator-set countdown surfaced on the SME banner.
   4. E07 drill one-click from the invoices view (currently ops-console only).
   5. Nightly replay regression over the FULL decision history (extends the integrity guardrail's window).
+
+---
+Task ID: 11 (main agent) — COMPLETED
+Agent: main-orchestrator (Z.ai Code)
+Task: Round 11 — judge-facing entry layer: landing page + auth screen with one-click demo login (user request), styling detail, QA via agent-browser.
+
+Work Log:
+- Read the full worklog (10 completed rounds, project stable) + QA baseline: dev server up, lint clean, 0 console errors across all 5 views, ledger pristine (9 txns balanced, M0).
+- ARCHITECTURE: only "/" is user-visible, so the pre-auth surfaces are a client-side stage machine in the ui store — stage: "landing" | "auth" | "app" (+ persona: "sme" | "operator", both persisted; signOut clears). page.tsx gates: mounted-guard renders landing first (hydration-safe, same pattern as theme), AnimatePresence crossfades between stages. signIn(persona) routes operators straight to the ops console, SMEs to Cash.
+- FEATURE — LANDING PAGE (src/views/landing-view.tsx): sticky header (anchor nav + lang + theme + Sign in CTA); hero with the Theme 2 story + "Enter the live demo" / "Judge demo access" CTAs; the HONEST QUOTE EXAMPLE — the seeded platinum invoice ESS-INV-2214 priced by the REAL money functions at render (21 days × 26 mbps × AED 43,650.00 principal → fee AED 238.32, net AED 43,411.68 — computed in integer fils, marketing copy earns no exemption); live stats band from /api/overview (wallet 123,285.09 / approved 109,450 / invested / floor with pulse dot + as-of); three Theme 2 pillar cards (dynamic discounting, milestone escrow, treasury autopilot — each with 3 bullets + tinted chip); 4-step golden path (numbered circles threaded by the waterline-rule); 6 non-negotiables trust grid; gradient final CTA band; sticky footer with challenge attribution. Framer-motion whileInView fade-ups (subtle 0.4s).
+- FEATURE — AUTH SCREEN (src/views/auth-view.tsx): two-column card — gradient brand panel (three pillars, live figures in a DARKENED bg-black/15 panel) + sign-in side. JUDGE DEMO ACCESS (top): two persona cards — Al Marwan Technical Services LLC (SME · Dubai · KYB verified · du Pay •••• 4471) and du platform operator — one-click "Enter demo as SME / Operator" with per-card busy spinner. Below: the du Business ID (mobile) + password form — any credentials sign in as the SME (honest stand-in for production SSO), empty-field validation, error role=alert. Back-to-landing bar with lang + theme toggles. Demo note (no real money, ledger seeded + balanced to the fil).
+- FEATURE — POST /api/auth/demo (read-only): validates persona (invalid → 400 honest problem), ensureSeed, returns {persona, entity identity (legalName, tradeLicence, emirate, kybState, duPaySuffix, licenceDaysRemaining), platform {mode, rulePackVersion}, demo:true}. Deliberately writes NOTHING — auth is not a money event; the append-only decision record stays reserved for product decisions.
+- APP SHELL: session chip in the rail (persona name + role, correct name per persona — SME vs du Platform Operations) + Sign out button (rail + mobile header); signOut returns to landing and clears persona/advisor state.
+- i18n: full landing + auth + session dictionaries, EN + designed AR mirror (Arabic is a mirror, not a translation — all ~90 keys). New icons: sign-out, phone, shield, scales.
+- STYLING/QA FIXES (found by programmatic WCAG + agent-browser, fixed):
+  - treasury chip on tinted bg 4.15:1 → bg-card (4.75:1 AA).
+  - white/75 & white/90 & white/80 text on grad-liquidity mid stop 3.5–4.45 → full white everywhere on gradients (4.6:1+); auth live-figure panel bg-white/10 (lightens gradient → 3.92 for white labels) → bg-black/15 darkened panel (6.0:1).
+  - MOBILE 375px AR overflow in the landing live-stats grid (28px never-wrapping money figures in 2 cols) → grid-cols-1 below sm (the card yields, the figure never shrinks — PRD 11.4).
+  - PRE-EXISTING mobile 375px AR overflow found + fixed: forecast-chart headline/summary grid-cols-3 squeezed 15px Arabic money captions off-screen by 2px → grid-cols-1 below sm.
+  - Doubled "bps/day/day" in the quote card (formatBps already includes the unit) — fixed.
+- VERIFIED END-TO-END (agent-browser + curl): landing renders with live data; Sign in → auth; one-click SME → Cash view with session chip; one-click Operator → lands directly on the Ops console; manual form (real keystrokes via agent-browser type) → SME session; reload → session persists (mounted-guard, no hydration mismatch); Sign out → landing; /api/auth/demo ok for sme/operator, honest 400 for unknown persona, 400-path message EN. Full sweep: app all views AR + landing AR (full scroll) + landing EN + auth + app all views EN = 0 console errors, 0 page errors, 0 unhandled rejections. No horizontal overflow: landing/auth/app at 375px (EN + AR) and desktop. VLM reviews: landing light PASS (badge contrast flagged by VLM was a false positive — measured 10.13:1), landing dark PASS (3/3), landing AR RTL PASS (RTL + no clipping + typography), auth PASS (4/4 checks), mobile AR landing PASS. Golden-path regression check: /api/status M0, all breakers closed, ledger balanced 9 txns 0 breaks (money paths untouched). Lint clean; tsc clean (project files). Screenshots: download/qa-r13-*.png.
+
+Stage Summary:
+
+## 1. Current project status assessment
+- WATERLINE is feature-complete for the Phase-1 demo scope and now has a complete judge-facing entry layer: landing → auth (one-click demo personas) → product, all inside the single "/" route. The core product (dynamic discounting, escrow, treasury, forecast, advisor, guardrail automation M1/M2/M3, canary, shadow pack) is unchanged and pristine.
+- The 10 prior rounds' non-negotiables were preserved in the new surfaces: the landing quote example uses the real integer-fils money functions, the demo login is read-only (no ledger/decision pollution), and everything is bilingual + RTL + dark by construction.
+
+## 2. Current goals / completed modifications / verification results
+- Goal (user request): "Add landing page, auth screens with demo login for judges" — COMPLETED plus mandatory styling detail (5 contrast/overflow fixes incl. one pre-existing mobile-AR bug) and the session layer (persisted stage/persona, persona-aware landing view, sign-out in rail + mobile).
+- All verification above: 0 console errors across every surface/language/mode, no overflow at 375px EN/AR, VLM PASS on all five reviewed screenshots, ledger untouched and balanced, lint clean.
+
+## 3. Unresolved issues / risks + next-phase priority recommendations
+- None outstanding from this round. Known limitations (by design): the manual form accepts any credentials (documented demo stand-in for du Business SSO — the honest hint is on the labels); persona only changes the landing view + session chip (judges can still see all 5 views, which is desirable for a demo); auth is client-side stage gating (a production build would add real sessions — the API shape is already the right one); the landing quote example is a static seeded scenario (labeled honestly) rather than a live quote (live quotes would write decision rows on every visit — deliberately avoided).
+- Next-phase candidates (priority order):
+  1. Landing "product tour" section: annotated screenshots of the real app views (would reuse the qa-r*.png archive) — richer story for judges who don't click through.
+  2. Operator sign-in should optionally open the ops console's status tab deep-linked to the guardrails drill (one more click saved for judges).
+  3. The E07 drill + canary actions from the next-phase list of Round 10 (M3 review clock, promote phase) remain open.
+  4. A "reset demo" affordance on the auth screen (currently reset lives in the ops console only).

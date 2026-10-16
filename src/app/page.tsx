@@ -1,9 +1,14 @@
 "use client";
 
-// WATERLINE — the product, embedded as a tile inside du Business.
+// WATERLINE — the single user-visible route. Three stages share "/":
+//   landing → the marketing surface judges see first (Theme 2 story,
+//             live demo figures, the honest-arithmetic example);
+//   auth    → the sign-in screen with one-click judge demo access;
+//   app     → the product, embedded as a tile inside du Business.
 // Route transition: 160 ms crossfade with a 12px directional offset,
 // mirrored under RTL (PRD 11.12).
 
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppShell } from "@/components/waterline/app-shell";
 import { CashView } from "@/views/cash-view";
@@ -11,6 +16,8 @@ import { InvoicesView } from "@/views/invoices-view";
 import { EscrowView } from "@/views/escrow-view";
 import { ActivityView } from "@/views/activity-view";
 import { OpsView } from "@/views/ops-view";
+import { LandingView } from "@/views/landing-view";
+import { AuthView } from "@/views/auth-view";
 import { useUi, type View } from "@/stores/ui";
 
 const VIEWS: Record<View, React.ComponentType> = {
@@ -23,7 +30,7 @@ const VIEWS: Record<View, React.ComponentType> = {
 
 const ORDER: View[] = ["cash", "invoices", "escrow", "activity", "ops"];
 
-export default function Page() {
+function AppStage() {
   const view = useUi((s) => s.view);
   const lang = useUi((s) => s.lang);
   const Active = VIEWS[view];
@@ -55,5 +62,53 @@ export default function Page() {
         </motion.div>
       </AnimatePresence>
     </AppShell>
+  );
+}
+
+export default function Page() {
+  const stage = useUi((s) => s.stage);
+  // The persisted session hydrates after mount — render the server-matching
+  // branch first so hydration never mismatches (same pattern as the theme).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(id);
+  }, []);
+  const effective: typeof stage = mounted ? stage : "landing";
+
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      {effective === "landing" ? (
+        <motion.div
+          key="landing"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
+        >
+          <LandingView />
+        </motion.div>
+      ) : effective === "auth" ? (
+        <motion.div
+          key="auth"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        >
+          <AuthView />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="app"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
+        >
+          <AppStage />
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

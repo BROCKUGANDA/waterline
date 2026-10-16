@@ -90,7 +90,7 @@ function MobileTabButton({
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { view, setView, lang, toggleLang, railCollapsed, toggleRail, setAdvisorOpen } = useUi();
+  const { view, setView, lang, toggleLang, railCollapsed, toggleRail, setAdvisorOpen, persona, signOut } = useUi();
   // The footer names the pack that decides right now — published on
   // /api/status, never hardcoded (M1 activates the cautious delta).
   const { data: status } = useStatus();
@@ -155,6 +155,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Utilities — separated from navigation by a rule (PRD 11.5 rail anatomy) */}
           <div className="p-2 space-y-1 border-t border-border">
+            {/* Demo session identity — the persona from the auth screen,
+                always visible, with sign-out one click away. */}
+            {!railCollapsed && (
+              <div className="flex items-center gap-2.5 rounded-md px-3 py-2 bg-surface-2/70">
+                <span className="h-7 w-7 rounded-full bg-accent-w-soft border border-accent-w/30 flex items-center justify-center shrink-0">
+                  <WlIcon name={persona === "operator" ? "terminal" : "buyer"} size={14} className="text-accent-w-dark" />
+                </span>
+                <div className="min-w-0">
+                  <div className="type-caption font-semibold text-foreground truncate">{persona === "operator" ? T.session.operatorName : T.session.smeName}</div>
+                  <div className="type-caption text-ink-400 truncate">{persona === "operator" ? T.session.operator : T.session.sme}</div>
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={signOut}
+              className="w-full flex items-center gap-3 rounded-md px-3 py-2 type-caption text-ink-600 hover:bg-surface-2 press-scale"
+              title={T.session.signOut}
+            >
+              <WlIcon name="sign-out" size={20} className={cn("text-ink-400", lang === "ar" && "scale-x-[-1]")} />
+              {!railCollapsed && <span>{T.session.signOut}</span>}
+            </button>
             {/* Advisor launcher — explains, never decides. Lives in the rail on
                 desktop so nothing floats over money figures (PRD 11.1). */}
             <button
@@ -215,6 +237,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className="h-11 w-11 flex items-center justify-center rounded-md text-ink-600 press-scale"
               >
                 <WlIcon name={isDark ? "sun" : "moon"} size={20} />
+              </button>
+              <button
+                type="button"
+                onClick={signOut}
+                aria-label={T.session.signOut}
+                className="h-11 w-11 flex items-center justify-center rounded-md text-ink-600 press-scale"
+              >
+                <WlIcon name="sign-out" size={20} className={cn(lang === "ar" && "scale-x-[-1]")} />
               </button>
               <button
                 type="button"
