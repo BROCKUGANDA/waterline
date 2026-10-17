@@ -1,14 +1,21 @@
-// WATERLINE — domain model, PRD Part 2.5 adapted for Prisma + SQLite.
+// WATERLINE — domain model, PRD Part 2.5.
 // Money is stored as INTEGER FILS (1 AED = 100 fils) — never floats (PRD 3.2).
 // Rates are fixed-point integers: priceMilliBpsPerDay = bps/day × 10 (34 = 3.4 bps).
-// Tenant key on every row (PRD 2.3). Enum-like fields are strings (SQLite has no enums).
+// Tenant key on every row (PRD 2.3); enforcement is NOT left to application
+// discipline — Postgres row-level security policies in prisma/migrations
+// require every table to carry the tenant predicate. Enum-like fields are
+// strings, matching the PRD's own model, and keep the schema portable.
+//
+// Datasource: PostgreSQL, not SQLite. PRD Part 2.3 requires "Tenant key on every
+// row. Enforced by Postgres row-level security, not by application discipline.
+// A query without tenant context returns nothing." SQLite has no equivalent.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -303,6 +310,14 @@ model StatusState {
   // the deterministic canary bucket of quote traffic while M0 holds. Any
   // automatic guardrail escalation withdraws the canary (auto-rollback).
   canaryJson            String?
+  // Per-tenant money-path serialisation token (PRD 4.5 floor guarantee, PRD 7
+  // "serialised per tenant with a reservation held during funding"). Money
+  // paths that must derive a balance and then move it without an interleaving
+  // window bump this row first: the UPDATE takes the datastore's exclusive
+  // write lock, so every concurrent money path for the tenant queues behind it.
+  // The value is a nonce, not a timestamp — two requests in the same millisecond
+  // must still produce distinct writes.
+  writeLockNonce String   @default("0")
   updatedAt       DateTime @updatedAt
 }
 
